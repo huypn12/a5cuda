@@ -161,22 +161,15 @@ __global__ void a5_cuda_kernel (
         R3 = (res & 0xFFFFFE0000000000) >> 41;
 
         // Discarded clocking
-        for (register int i = 0; i < 99; ) {
+        for (register int i = 0; i < 99; i++) {
             clockMajor(R1, R2, R3);
-            clockMajor(R1, R2, R3);
-            clockMajor(R1, R2, R3);
-            i += 3;
         }
 
         // saved clocking
         res = 0ULL;
-        for (register int i = 0; i < 64;) {
+        for (register int i = 0; i < 16; i++) {
             clockMajor(R1, R2, R3);
             res |= ((0ULL | (((R1&R1OUT)>>18)^((R2&R2OUT)>>21)^((R3&R3OUT)>>22))) << i);
-            ++i;
-            clockMajor(R1, R2, R3);
-            res |= ((0ULL | (((R1&R1OUT)>>18)^((R2&R2OUT)>>21)^((R3&R3OUT)>>22))) << i);
-            ++i;
         }
 
         res ^= rf;

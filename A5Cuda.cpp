@@ -170,16 +170,15 @@ bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value)//, uint32_t&
 /**
  * Author: Huy Phung
  * processing function, invoking each slice to change state
- * TODO: activate multiple slices from multiple devices
+ * TODO: activate multiple slices from multiple devices by MPI
  */
 void A5Cuda::Process()
 {
     A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
 
     /**
-     * TODO:
+     * TODO: master node (cpu work distributor) push down work to all slaves (GPU work processor)
      */
-    printf("aoeuaoue\n", "aoeuaoeu");
     for (;;)
     {
         mMutex.lock();
