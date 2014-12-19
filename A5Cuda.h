@@ -68,7 +68,7 @@ class A5Cuda
         // public method for input & output
         int Submit(uint64_t start_value, unsigned int start_round, uint32_t advance, void* context);
         int SubmitPartial(uint64_t start_value, unsigned int stop_round, uint32_t advance, void* context);
-        bool PopResult(uint64_t&, uint64_t&);
+        bool PopResult(uint64_t&, uint64_t&, void* context);
 
     private:
         friend class A5CudaSlice;
@@ -102,6 +102,7 @@ class A5Cuda
         bool PushResult(JobPiece_s*);
         bool PopRequest(JobPiece_s*);
         void Process();
+        uint64_t ReverseBits(uint64_t);
 };
 
 #endif

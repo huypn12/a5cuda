@@ -16,7 +16,6 @@ uint64_t ReverseBits(uint64_t r)
   return r2;
 }
 
-__device__ inline
 int PopcountNibble(int x) {
     int res = 0;
     for (int i=0; i<4; i++) {
@@ -26,7 +25,6 @@ int PopcountNibble(int x) {
     return res;
 }
 
-__device__ inline
 int calcClockMask(unsigned int clocks)
 {
     int k = clocks & 0xf;
@@ -65,7 +63,6 @@ int calcClockMask(unsigned int clocks)
     return ((r2count<<12) | (cm1<<8) | (cm2<<4) | cm3);
 }
 
-__device__ inline
 unsigned int calcTable6bit(unsigned int lfsr)
 {
     int j = lfsr & 0xf;
@@ -90,10 +87,11 @@ unsigned int calcTable6bit(unsigned int lfsr)
         }
         mask = mask << 1;
     }
+    //int index = i * 16 + j;
+    //printf("%02x:%x -> %x %x\n", i,j,feedback, output);
     return ((feedback<<4) | output);
 }
 
-__device__ inline
 unsigned int calcTable5bit(unsigned int lfsr)
 {
     int j = lfsr & 0xf;
@@ -122,7 +120,6 @@ unsigned int calcTable5bit(unsigned int lfsr)
 
 }
 
-__device__ inline
 unsigned int calcTable4bit(unsigned int lfsr)
 {
     int j = lfsr & 0xf;
@@ -137,41 +134,41 @@ unsigned int calcTable4bit(unsigned int lfsr)
         data = data << 1;
         feedback ^= (v&0x01);
     }
+//    int index = i * 16 + j;
     return ((count<<4)|feedback);
+//    printf("%02x:%x -> %x\n", i,j,feedback );
 
 }
 
-__global__
-a5_cuda_kernel_bitslice(
-        unsigned int cycles,
-        unsigned int size,
-        unsigned int condition,
-        uint64_t* states,
-        uint64_t* advances,
-        unsigned int* finished)
+
+uint64_t a5test(
+        uint64_t start_point,
+        int32_t start_round,
+        int32_t stop_round,
+        int32_t max_rounds,
+        uint32_t advance
+        )
 {
+    uint64_t start_point_r = ReverseBits(start_point);
+    uint64_t target = 0ULL;
+    class Advance* adv = new Advance(advance, 8);
+    const uint32_t* RFtable = adv->getRFtable();
+    uint32_t mCondition = 32 - 12;
 
-    int threadIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= size) {
-        return;
-    }
-    if (finished[idx]) {
-        return;
-    }
+    unsigned int out_hi = start_point_r>>32;
+    unsigned int out_lo = start_point_r;
 
-    unsigned int out_hi = states[i] >> 32;
-    unsigned int out_lo = state[i];
-    
-    out_lo = out_lo ^ advances[threadIdx];
-    out_hi = out_hi ^ advances[threadIdx] >> 32;
+    unsigned int target_lo = target;
+    unsigned int target_hi = target >> 32;
 
     unsigned int last_key_lo;
     unsigned int last_key_hi;
 
     bool keysearch = (target != 0ULL);
 
-//    for (int round=start_round; round < stop_round; ) {
-    for (int cycle = 0; cycle < cycles; cycle++) {
+    for (int round=start_round; round < stop_round; ) {
+        out_lo = out_lo ^ RFtable[2*round];
+        out_hi = out_hi ^ RFtable[2*round+1];
 
         if ((out_hi>>mCondition)==0) {
             // uint64_t res = (((uint64_t)out_hi)<<32)|out_lo;
@@ -263,19 +260,32 @@ a5_cuda_kernel_bitslice(
             /* report key as finishing state */
             out_hi = last_key_hi;
             out_lo = last_key_lo;
-            //start_round = -1;
-            finished[idx] = 1;
+            start_round = -1;
             break;
         }
     }
 
+    // printf("Completed in %i ms\n", uSecs/1000);
+
     /* Report completed chains */
-    /*
+
     uint64_t res = (((uint64_t)out_hi)<<32)|out_lo;
     res = ReverseBits(res);
     return res;
-    */
-    state[i] = (((uint64_t) out_hi) << 32) | out_lo;
-
 }
 
+int main(int argc, char const* argv[])
+{
+    uint64_t start_point =0x70d14a4d976961e9;// 0xef1dd70199e116f;
+    uint32_t advance = 140;
+    unsigned int start_round = 0;
+    unsigned int stop_round = 0;
+    unsigned int max_round = 8;
+
+    a5test(start_point, 1, max_round, max_round, advance);
+    //for (int i = 0; i < 8; i++) {
+      //  printf("%llx \n", a5test(start_point, i, max_round, max_round, advance));
+    //}
+
+    return 0;
+}

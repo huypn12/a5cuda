@@ -139,7 +139,7 @@ void A5CudaSlice::process()
             if (controller->PopRequest(currentJob)) {
                 unsigned int startRound = currentJob->start_round;
                 hm_roundfuncs[i]        = currentJob->round_func[startRound];
-                hm_states[i]            = currentJob->round_func[startRound] ^ currentJob->start_value;
+                hm_states[i]            = ReverseBits(currentJob->start_value);
                 hm_finished[i]          = CHAINSTATE_RUNNING;
             } else {
             }
@@ -151,10 +151,10 @@ void A5CudaSlice::process()
                 currentJob->end_value = 0xffffffffffffffffULL;
                 controller->PushResult(currentJob);
                 currentJob->idle = true;
-                if (controller->PopRequest(currentJob)) {
+                if (controller->PopRequest(currentJob)) { // <- pop request
                     currentJob->idle = false;
                     hm_roundfuncs[i] = currentJob->round_func[currentJob->start_value];
-                    hm_states[i]     = currentJob->start_value ^ hm_roundfuncs[i];
+                    hm_states[i]     = ReverseBits(currentJob->start_value);
                     hm_finished[i]   = CHAINSTATE_RUNNING;
                 } else {
                 }
@@ -169,9 +169,8 @@ void A5CudaSlice::process()
                             currentJob->idle = true;
                             if (controller->PopRequest(currentJob)) {
                                 currentJob->idle = false;
-                                assert (currentJob != NULL);
                                 hm_roundfuncs[i] = currentJob->round_func[currentJob->start_round];
-                                hm_states[i]     = currentJob->start_value ^ hm_roundfuncs[i];
+                                hm_states[i]     = ReverseBits(currentJob->start_value);
                                 hm_finished[i]   = CHAINSTATE_RUNNING;
                             }
                         // partial search, front submit
@@ -181,7 +180,7 @@ void A5CudaSlice::process()
                             if (controller->PopRequest(currentJob)) {
                                 currentJob->idle = false;
                                 hm_roundfuncs[i] = currentJob->round_func[currentJob->start_round];
-                                hm_states[i]     = currentJob->start_value ^ hm_roundfuncs[i];
+                                hm_states[i]     = ReverseBits(currentJob->start_value);
                                 hm_finished[i]   = CHAINSTATE_RUNNING;
                             }
                         }
@@ -221,3 +220,16 @@ void A5CudaSlice::invokeKernel()
     }
     return;
 }
+
+/* Reverse bit order of an unsigned 64 bits int */
+uint64_t A5Cuda::ReverseBits(uint64_t r)
+{
+  uint64_t r1 = r;
+  uint64_t r2 = 0;
+  for (int j = 0; j < 64 ; j++ ) {
+    r2 = (r2<<1) | (r1 & 0x01);
+    r1 = r1 >> 1;
+  }
+  return r2;
+}
+

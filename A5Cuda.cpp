@@ -21,7 +21,7 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
 {
     mRunning = true;
     mMaxRound = max_rounds;
-    mCondition = condition;
+    mCondition = 32 - condition;
     processThread = new boost::thread(boost::bind(&A5Cuda::Process, this));
 }
 
@@ -148,7 +148,7 @@ bool A5Cuda::PushResult(JobPiece_s* job)
  * @param: uint64_t, uint64_t
  * @return: true if output queue is not empty
  */
-bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value)//, uint32_t& start_round, uint32_t& stop_round, void** context)
+bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value, void* context)//, uint32_t& start_round, uint32_t& stop_round, void** context)
 {
     bool res = false;
 
@@ -231,8 +231,7 @@ extern "C" {
     int DLL_PUBLIC A5CudaPopResult(uint64_t& start_value, uint64_t& stop_value,
             int32_t& start_round, void* context) {
         if (a5Instance) {
-            return a5Instance->PopResult(start_value, stop_value,
-                    start_round, context);
+            return a5Instance->PopResult(start_value, stop_value, context);
         }
         return -1;
     }

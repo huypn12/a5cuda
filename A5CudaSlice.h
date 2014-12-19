@@ -1,9 +1,6 @@
 #ifndef __A5_CUDA_SLICE__
 #define __A5_CUDA_SLICE__
 
-#include <thread>
-#include <mutex>
-
 #include "A5Cuda.h"
 #include "kernel/A5CudaKernel.h"
 
@@ -53,7 +50,7 @@ class A5CudaSlice {
         unsigned int* hm_finished;
         unsigned int* d_finished;
 
-        //
+        uint64_t ReverseBits(uint64_t);
         void populate();
         void invokeKernel();
         void process();
