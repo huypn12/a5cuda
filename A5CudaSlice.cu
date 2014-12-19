@@ -207,6 +207,10 @@ void A5CudaSlice::process()
  */
 void A5CudaSlice::invokeKernel()
 {
+    // dec18_2014, huy.phung
+    // dynamically specify block size
+
+
     dim3 dimBlock(BLOCK_SIZE, 1);
     dim3 dimGrid((DATA_SIZE - 1) / BLOCK_SIZE + 1, 1);
     a5_cuda_kernel<<<dimBlock, dimGrid>>>(nCycles, DATA_SIZE, d_states, d_roundfuncs, d_finished);

@@ -177,9 +177,8 @@ void A5Cuda::Process()
     A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
 
     /**
-     * TODO:
+     * TODO: each device has exactly 16 streams, scan over all stream to push new job
      */
-    printf("aoeuaoue\n", "aoeuaoeu");
     for (;;)
     {
         mMutex.lock();
@@ -198,3 +197,48 @@ void A5Cuda::Process()
     delete slice;
 }
 
+extern "C" {
+    static class A5Cuda* a5Instance = 0;
+
+    bool DLL_PUBLIC A5CudaInit(int max_rounds, int condition) {
+        if (a5Instance) {
+            return false;
+        }
+        a5Instance = new A5Cuda(max_rounds, condition);
+        return true;
+    }
+
+    int DLL_PUBLIC A5CudaSubmit(uint64_t start_value,
+            int32_t start_round, uint32_t advance,
+            void* context) {
+        if (a5Instance) {
+            return a5Instance->Submit(start_value, start_round,
+                    advance, context);
+        }
+        return -1;
+    }
+
+    int DLL_PUBLIC A5CudaSubmitPartial(uint64_t start_value,
+            int32_t stop_round, uint32_t advance,
+            void* context) {
+        if (a5Instance) {
+            return a5Instance->SubmitPartial(start_value, stop_round,
+                    advance, context);
+        }
+        return -1;
+    }
+
+    int DLL_PUBLIC A5CudaPopResult(uint64_t& start_value, uint64_t& stop_value,
+            int32_t& start_round, void* context) {
+        if (a5Instance) {
+            return a5Instance->PopResult(start_value, stop_value,
+                    start_round, context);
+        }
+        return -1;
+    }
+
+    void DLL_PUBLIC A5CudaShutDown() {
+        delete a5Instance;
+        a5Instance = NULL;
+    }
+}
