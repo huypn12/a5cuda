@@ -1,3 +1,22 @@
+/***************************************************************
+ * A5/1 Chain generator.
+ *
+ * Copyright 2009. Frank A. Stevenson. All rights reserved.
+ *
+ * Permission to distribute, modify and copy is granted to the
+ * TMTO project, currently hosted at:
+ *
+ * http://reflextor.com/trac/a51
+ *
+ * Code may be modifed and used, but not distributed by anyone.
+ *
+ * Request for alternative licencing may be directed to the author.
+ *
+ * All (modified) copies of this source must retain this copyright notice.
+ *
+ *******************************************************************/
+
+
 #ifndef __A5_CUDA__
 #define __A5_CUDA__
 

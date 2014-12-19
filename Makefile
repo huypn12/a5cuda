@@ -4,12 +4,16 @@
 
 
 NVCC            = /usr/local/cuda/bin/nvcc
-NVCCFLAGS       = -O2 -gencode arch=compute_20,code=sm_21 -Xcompiler -fpic
+NVCCFLAGS       = -O2 -gencode arch=compute_30,code=sm_35 -Xcompiler -fpic
 CC              = g++ 
 CFLAGS          = -Wall -fPIC
 INCLUDE         = -I/usr/local/cuda/include
 LD_LIBRARY_PATH = -fPIC -lstdc++ -ldl -L/usr/local/cuda/lib64 -lcuda -lcudart -L/usr/lib64 -lboost_system -lboost_thread
 LINKER          = gcc -shared 
+
+test: all
+	$(CC) $(CFLAGS) -c test/a5cuda_test.cpp
+	$(LINKER) -o a5cuda a5cuda_test.o A5Cuda.so
 
 all: A5Cuda.o A5CudaKernel.o A5CudaSlice.o Advance.o
 	$(LINKER) $(LD_LIBRARY_PATH) -o A5Cuda.so A5CudaKernel.o A5Cuda.o A5CudaSlice.o Advance.o
