@@ -7,7 +7,8 @@ static bool isDllLoaded = false;
 static bool isDllError  = false;
 
 static bool (*fPipelineInfo)(int &length) = NULL;
-static bool (*fInit)(int max, int cond, unsigned int mask, int mult) = NULL;
+//static bool (*fInit)(int max, int cond, unsigned int mask, int mult) = NULL;
+static bool (*fInit)(int max, int cond) = NULL;
 static int  (*fSubmit)(uint64_t value, unsigned int start,
         uint32_t id, void* ctx) = NULL;
 static int  (*fSubmitPartial)(uint64_t value, unsigned int stop,
@@ -39,7 +40,7 @@ static void LoadDLL(void)
         return;
     }
 
-    LoadDllSym(lHandle, "A5CudaPipelineInfo", (void**)&fPipelineInfo);
+//    LoadDllSym(lHandle, "A5CudaPipelineInfo", (void**)&fPipelineInfo);
     LoadDllSym(lHandle, "A5CudaInit", (void**)&fInit);
     LoadDllSym(lHandle, "A5CudaSubmit", (void**)&fSubmit);
     LoadDllSym(lHandle, "A5CudaSubmitPartial", (void**)&fSubmitPartial);
@@ -50,12 +51,11 @@ static void LoadDLL(void)
 }
 
 
-bool A5CudaInit(int max_rounds, int condition, unsigned int gpu_mask,
-        int pipemul)
+bool A5CudaInit(int max_rounds, int condition)//, unsigned int gpu_mask,int pipemul)
 {
     LoadDLL();
     if (isDllLoaded) {
-        return fInit(max_rounds, condition, gpu_mask, pipemul);
+        return fInit(max_rounds, condition);//, gpu_mask, pipemul);
     } else {
         return false;
     }

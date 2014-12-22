@@ -122,7 +122,7 @@ bool A5Cuda::PopRequest(JobPiece_s* job)
         mInputStart.pop_front();
         job->start_round = mInputRoundStart.front();
         mInputRoundStart.pop_front();
-        job->end_round = mInputRoundStop.front();
+        job->end_round = mInputRoundStop.front()-1;
         mInputRoundStop.pop_front();
         job->current_round = job->start_round;
         job->context = mInputContext.front();
@@ -247,14 +247,14 @@ extern "C" {
     }
 
     int DLL_PUBLIC A5CudaPopResult(uint64_t& start_value, uint64_t& stop_value,
-            int32_t& start_round, void* context) {
+            void* context) {
         if (a5Instance) {
             return a5Instance->PopResult(start_value, stop_value, context);
         }
         return -1;
     }
 
-    void DLL_PUBLIC A5CudaShutDown() {
+    void DLL_PUBLIC A5CudaShutdown() {
         delete a5Instance;
         a5Instance = NULL;
     }

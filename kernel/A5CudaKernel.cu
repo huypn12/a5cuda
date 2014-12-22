@@ -1,191 +1,251 @@
+#include <stdio.h>
+#include <stdint.h>
 #include "A5CudaKernel.h"
 
-// Clock bit$
-#define R1CLK   0x000100
-#define R2CLK   0x000400
-#define R3CLK   0x000400
-
-// Feedback tapping bits
-#define R1TAPS  0x072000
-#define R2TAPS  0x300000
-#define R3TAPS  0x700080
-
-// Output tapping bits
-#define R1OUT   0x040000
-#define R2OUT   0x200000
-#define R3OUT   0x400000
-
-#define BLOCK_SIZE 16
-
-// Calculate parity
-__device__ inline int parity(uint64_t x)
-{
-    x ^= x >> 16;
-    x ^= x >> 8;
-    x ^= x >> 4;
-    x ^= x >> 2;
-    x ^= x >> 1;
-    return (x&1);
-}
-
-// Calculate parity for a byte
 __device__ inline
-int parityByte(unsigned char x) {
-    x ^= x>>4;
-    x ^= x>>2;
-    x ^= x>>1;
-    return x&1;
+int PopcountNibble(int x) {
+    int res = 0;
+    for (int i=0; i<4; i++) {
+        res += x & 0x01;
+        x = x >> 1;
+    }
+    return res;
 }
 
-// Calculate parity for 2 bits
-__device__ inline
-int parity2Bits(unsigned char x) {
-    x ^= x>>1;
-    return x&1;
-}
-
-// Clock one register
-__device__ inline
-int32_t clockOne (uint32_t reg, uint32_t taps)
+    __device__ inline
+int calcClockMask(unsigned int clocks)
 {
-    taps = reg & taps; //  Tung: no need for t
-    reg = (reg << 1);
-    reg |= parity(taps);
-    return reg;
+    int k = clocks & 0xf;
+    int j = (clocks >> 4) & 0xf;
+    int i = (clocks >> 8) & 0xf;
+
+    /* Copy input */
+    int m1 = i;
+    int m2 = j;
+    int m3 = k;
+    /* Generate masks */
+    int cm1 = 0;
+    int cm2 = 0;
+    int cm3 = 0;
+    /* Counter R2 */
+    int r2count = 0;
+    for (int l = 0; l < 4 ; l++ ) {
+        cm1 = cm1 << 1;
+        cm2 = cm2 << 1;
+        cm3 = cm3 << 1;
+        int maj = ((m1>>3)+(m2>>3)+(m3>>3))>>1;
+        if ((m1>>3)==maj) {
+            m1 = (m1<<1)&0x0f;
+            cm1 |= 0x01;
+        }
+        if ((m2>>3)==maj) {
+            m2 = (m2<<1)&0x0f;
+            cm2 |= 0x01;
+            r2count++;
+        }
+        if ((m3>>3)==maj) {
+            m3 = (m3<<1)&0x0f;
+            cm3 |= 0x01;
+        }
+    }
+    return ((r2count<<12) | (cm1<<8) | (cm2<<4) | cm3);
 }
 
-__device__ inline
-int32_t clockOne_R1(uint32_t reg)
+    __device__ inline
+unsigned int calcTable6bit(unsigned int lfsr)
 {
-    unsigned char t = (reg & R1TAPS) >> 13; // get only bits from 18-13
-    reg = (reg << 1);
-    reg |= parityByte(t);
-    return reg;
+    int j = lfsr & 0xf;
+    int i = (lfsr >> 4) & 0x3f;
+
+    int count = PopcountNibble(j);
+    int feedback = 0;
+    int data = i;
+    for (int k=0; k<count; k++) {
+        feedback = feedback << 1;
+        int v = (data>>5) ^ (data>>4) ^ (data>>3);
+        data = data << 1;
+        feedback ^= (v&0x01);
+    }
+    data = i;
+    int mask = j;
+    int output = 0;
+    for (int k=0; k<4; k++) {
+        output = (output<<1) ^ ((data>>5)&0x01);
+        if (mask&0x08) {
+            data = data << 1;
+        }
+        mask = mask << 1;
+    }
+    return ((feedback<<4) | output);
 }
 
-__device__ inline
-int32_t clockOne_R2(uint32_t reg)
+    __device__ inline
+unsigned int calcTable5bit(unsigned int lfsr)
 {
-    unsigned char taps = (reg & R2TAPS) >> 20; // get only 2 bits from 20 -> 21
-    reg = (reg << 1);
-    reg |= parity2Bits(taps);
-    return reg;
+    int j = lfsr & 0xf;
+    int i = (lfsr >> 4) & 0x1f;
+
+    int count = PopcountNibble(j);
+    int feedback = 0;
+    int data = i;
+    for (int k=0; k<count; k++) {
+        feedback = feedback << 1;
+        int v = (data>>4) ^ (data>>3);
+        data = data << 1;
+        feedback ^= (v&0x01);
+    }
+    data = i;
+    int mask = j;
+    int output = 0;
+    for (int k=0; k<4; k++) {
+        output = (output<<1) ^ ((data>>4)&0x01);
+        if (mask&0x08) {
+            data = data << 1;
+        }
+        mask = mask << 1;
+    }
+    return ((feedback<<4) | output);
+
 }
 
-// Calculate majority
-__device__ inline int32_t majority (uint32_t R1, uint32_t R2, uint32_t R3)
+    __device__ inline
+unsigned int calcTable4bit(unsigned int lfsr)
 {
-    // Tung: Use shift -> faster than parity
-    int32_t sum = ((R1&R1CLK)>>8) + ((R2&R2CLK)>>10) + ((R3&R3CLK)>>10);
-    return sum >> 1;
+    int j = lfsr & 0xf;
+    int i = (lfsr >> 4) & 0xf;
+
+    int count = PopcountNibble(j);
+    int feedback = 0;
+    int data = i;
+    for (int k=0; k<count; k++) {
+        feedback = feedback << 1;
+        int v = (data>>3);
+        data = data << 1;
+        feedback ^= (v&0x01);
+    }
+    return ((count<<4)|feedback);
+
 }
 
-// Clock majority
-__device__ inline void clockMajor (uint32_t& R1, uint32_t& R2, uint32_t &R3)
-{
-    // new clock using bitshift
-    int32_t major = majority(R1, R2, R3);
-    int32_t majr1 = (((R1 & R1CLK) != 0) == major);
-    R1 = (((majr1 << 31) >> 31) & clockOne_R1(R1)) | (((!majr1 << 31) >> 31) & R1);
-    majr1 = (((R2 & R2CLK) != 0) == major);
-    R2 = (((majr1 << 31) >> 31) & clockOne_R2(R2)) | (((!majr1 << 31) >> 31) & R2);
-    majr1 = (((R3 & R3CLK) != 0) == major);
-    R3 = (((majr1 << 31) >> 31) & clockOne(R3, R3TAPS)) | (((!majr1 << 31) >> 31) & R3);
-}
-
-// Reverse bits
-__device__ inline
-uint64_t reversebits (uint64_t R, int length)
-{
-    R = ((R >> 1) & 0x5555555555555555) | ((R & 0x5555555555555555) << 1);
-    // swap consecutive pairs
-    R = ((R >> 2) & 0x3333333333333333) | ((R & 0x3333333333333333) << 2);
-    // swap nibbles ...
-    R = ((R >> 4) & 0x0F0F0F0F0F0F0F0F) | ((R & 0x0F0F0F0F0F0F0F0F) << 4);
-    // swap bytes
-    R = ((R >> 8) & 0x00FF00FF00FF00FF) | ((R & 0x00FF00FF00FF00FF) << 8);
-    // swap 2-byte long pairs
-    R = ((R >> 16) & 0x0000FFFF0000FFFF) | ((R & 0x0000FFFF0000FFFF)  << 16);
-    // last
-    R = ( (R >> 32) | (R << 32));
-
-    R = R >> (64-length);
-    return R;
-}
-
-__device__ inline
-int64_t selectbitwise(int64_t a, int64_t b, int64_t test)
-{
-    test = !!test;
-    test = ((test << 63) >> 63) & a;
-    int64_t t2 = !test;
-    test |= ((t2 << 63) >> 63) & b;
-    return test;
-}
-
-/**
- * kernel, process each of 32 chain slots
- */
-__global__ void a5_cuda_kernel (
-        unsigned int rounds,
+    __global__
+void a5_cuda_kernel(
+        unsigned int cycles,
         unsigned int size,
-        uint64_t* state,
-        uint64_t* roundfuncs,
-        unsigned int* finished
-        )
+        unsigned int condition,
+        uint64_t* states,
+        uint64_t* advances,
+        unsigned int* control)
 {
-    int idx;
-    idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) {
         return;
     }
 
-    if (finished[idx]) {
-        return;
+
+    uint64_t new_value;
+    uint64_t old_value;
+    unsigned int out_hi = states[idx] >> 32;
+    unsigned int out_lo = states[idx];
+
+    unsigned int last_key_lo;
+    unsigned int last_key_hi;
+
+    unsigned int active, iactive;
+    //    for (int round=start_round; round < stop_round; ) {
+    for (int cycle = 0; cycle < cycles; cycle++) {
+        out_lo = out_lo ^ ((uint32_t) advances[idx]);
+        out_hi = out_hi ^ ((uint32_t) (advances[idx] >> 32));
+        if ((out_hi>>condition)==0) {
+            // if switch round: evict
+            active = 1;
+        }
+        unsigned int lfsr1 = out_lo;
+        unsigned int lfsr2 = (out_hi << 13) | (out_lo >> 19);
+        unsigned int lfsr3 = out_hi >> 9;
+
+        last_key_hi = out_hi;
+        last_key_lo = out_lo;
+
+        for (int i=0; i<25 ; i++) {
+            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+            int masks = calcClockMask(clocks);
+
+            /* lfsr1 */
+            unsigned int tmask = (masks>>8)&0x0f;
+            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+
+            /* lfsr2 */
+            tmask = (masks>>4)&0x0f;
+            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+            out_hi = out_hi ^ (tval&0x0f);
+            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+
+            /* lfsr3 */
+            tmask = masks & 0x0f;
+            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+        }
+        for (int i=0; i<8 ; i++) {
+            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+            int masks = calcClockMask(clocks);
+
+            /* lfsr1 */
+            unsigned int tmask = (masks>>8)&0x0f;
+            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+
+            out_hi = (out_hi << 4) | (tval&0x0f);
+            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+
+            /* lfsr2 */
+            tmask = (masks>>4)&0x0f;
+            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+            out_hi = out_hi ^ (tval&0x0f);
+            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+
+            /* lfsr3 */
+            tmask = masks & 0x0f;
+            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+            out_hi =  out_hi ^ (tval&0x0f);
+            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+        }
+        for (int i=0; i<8 ; i++) {
+            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+            int masks = calcClockMask(clocks);
+
+            /* lfsr1 */
+            unsigned int tmask = (masks>>8)&0x0f;
+            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+            out_lo = (out_lo << 4) | (tval&0x0f);
+            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+
+            /* lfsr2 */
+            tmask = (masks>>4)&0x0f;
+            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+            out_lo = out_lo ^ (tval&0x0f);
+            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+
+            /* lfsr3 */
+            tmask = masks & 0x0f;
+            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+            out_lo =  out_lo ^ (tval&0x0f);
+            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+        }
+
+        new_value = (((uint64_t) out_hi) << 32) | out_lo;
+        old_value = (((uint64_t) last_key_hi) << 32) | last_key_lo;
+        if (active) {
+            states[idx] = old_value;
+        } else {
+            states[idx] = new_value;
+        }
     }
-
-     __shared__ unsigned int ok; ok = finished[idx];
-     __shared__ uint64_t res; res = state[idx];
-     __shared__ uint64_t rf; rf = roundfuncs[idx];
-
-    __shared__ uint32_t R1;
-    __shared__ uint32_t R2;
-    __shared__ uint32_t R3;
-
-    for (register int r = 0; r < rounds; r++) {
-        // Put output to register
-        // Tung: reversbits only one
-        res = reversebits(res, 64);
-        R1 = res & 0x7FFFF;
-        R2 = (res & 0x1FFFFF80000) >> 19;
-        R3 = (res & 0xFFFFFE0000000000) >> 41;
-
-        // Discarded clocking
-        for (register int i = 0; i < 99; ) {
-            clockMajor(R1, R2, R3);
-            clockMajor(R1, R2, R3);
-            clockMajor(R1, R2, R3);
-            i += 3;
-        }
-
-        // saved clocking
-        res = 0ULL;
-        for (register int i = 0; i < 64;) {
-            clockMajor(R1, R2, R3);
-            res |= ((0ULL | (((R1&R1OUT)>>18)^((R2&R2OUT)>>21)^((R3&R3OUT)>>22))) << i);
-            ++i;
-            clockMajor(R1, R2, R3);
-            res |= ((0ULL | (((R1&R1OUT)>>18)^((R2&R2OUT)>>21)^((R3&R3OUT)>>22))) << i);
-            ++i;
-        }
-
-        res ^= rf;
-
-        if ((res & 0xFFF) == 0) {
-            ok = 1;
-            break;
-        }
-    }
-    state[idx] = res;
-    finished[idx] = ok;
 }
+

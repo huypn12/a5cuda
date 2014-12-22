@@ -12,7 +12,7 @@
 
 #define CHAINSTATE_RUNNING  0
 #define CHAINSTATE_FINISHED 1
-
+#define CHAINSTATE_LASTROUND   2
 
 class A5Cuda;
 
@@ -28,9 +28,10 @@ class A5CudaSlice {
         cudaStream_t stream;
         // parameter slice
         uint64_t finishedMask;
-        unsigned int maxCycles;
-        unsigned int maxRound;
-        unsigned int nCycles;
+        unsigned int mMaxCycles;
+        unsigned int mMaxRound;
+        unsigned int mCycles;
+        unsigned int mDp;
         bool isRunning;
 
         // pull model, controller is to pull data
@@ -45,10 +46,10 @@ class A5CudaSlice {
         // hm = host mappe; d = device
         uint64_t* hm_states;
         uint64_t* d_states;
-        uint64_t* hm_roundfuncs;
-        uint64_t* d_roundfuncs;
-        unsigned int* hm_finished;
-        unsigned int* d_finished;
+        uint64_t* hm_advances;
+        uint64_t* d_advances;
+        unsigned int* hm_control;
+        unsigned int* d_control;
 
         uint64_t ReverseBits(uint64_t);
         void populate();
