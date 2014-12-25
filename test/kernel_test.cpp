@@ -7,13 +7,13 @@
 /* Reverse bit order of an unsigned 64 bits int */
 uint64_t ReverseBits(uint64_t r)
 {
-  uint64_t r1 = r;
-  uint64_t r2 = 0;
-  for (int j = 0; j < 64 ; j++ ) {
-    r2 = (r2<<1) | (r1 & 0x01);
-    r1 = r1 >> 1;
-  }
-  return r2;
+    uint64_t r1 = r;
+    uint64_t r2 = 0;
+    for (int j = 0; j < 64 ; j++ ) {
+        r2 = (r2<<1) | (r1 & 0x01);
+        r1 = r1 >> 1;
+    }
+    return r2;
 }
 
 int PopcountNibble(int x) {
@@ -134,9 +134,9 @@ unsigned int calcTable4bit(unsigned int lfsr)
         data = data << 1;
         feedback ^= (v&0x01);
     }
-//    int index = i * 16 + j;
+    //    int index = i * 16 + j;
     return ((count<<4)|feedback);
-//    printf("%02x:%x -> %x\n", i,j,feedback );
+    //    printf("%02x:%x -> %x\n", i,j,feedback );
 
 }
 
@@ -166,105 +166,121 @@ uint64_t a5test(
 
     bool keysearch = (target != 0ULL);
 
+    int cycle=0, max_cycles = 256;
+    bool active=false, endround = false, finished=false;
     for (int round=start_round; round < stop_round; ) {
-        out_lo = out_lo ^ RFtable[2*round];
-        out_hi = out_hi ^ RFtable[2*round+1];
-
-        if ((out_hi>>mCondition)==0) {
-            // uint64_t res = (((uint64_t)out_hi)<<32)|out_lo;
-            // res = ReverseBits(res);
-            // printf("New round %i %016llx %08x:%08x\n", round, res, out_hi, out_lo);
+        if (active) {
             round++;
-            if (round>=stop_round) break;
+            active = false;
+            if (round >= stop_round) break;
         }
-
-        unsigned int lfsr1 = out_lo;
-        unsigned int lfsr2 = (out_hi << 13) | (out_lo >> 19);
-        unsigned int lfsr3 = out_hi >> 9;
-
-        last_key_hi = out_hi;
-        last_key_lo = out_lo;
-
-        for (int i=0; i<25 ; i++) {
-            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
-            int masks = calcClockMask(clocks);
-
-            /* lfsr1 */
-            unsigned int tmask = (masks>>8)&0x0f;
-            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
-            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
-            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
-
-            /* lfsr2 */
-            tmask = (masks>>4)&0x0f;
-            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
-            out_hi = out_hi ^ (tval&0x0f);
-            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
-
-            /* lfsr3 */
-            tmask = masks & 0x0f;
-            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
-            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
-            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+        if (round == (stop_round - 1)) {
+            endround = true;
         }
-        for (int i=0; i<8 ; i++) {
-            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
-            int masks = calcClockMask(clocks);
+        while (true) {
+            if (finished) {
+                finished = false;
+                //printf("breaking\n");
+                break;
+            }
+            for (int cycle=0; cycle < max_cycles; cycle++) {
 
-            /* lfsr1 */
-            unsigned int tmask = (masks>>8)&0x0f;
-            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
-            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+                out_lo = out_lo ^ RFtable[2*round];
+                out_hi = out_hi ^ RFtable[2*round+1];
 
-            out_hi = (out_hi << 4) | (tval&0x0f);
-            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+                if ((out_hi>>mCondition)==0) {
+                    active = true;
+                    //                    printf("%lx\n",ReverseBits(((uint64_t) out_hi << 32) | out_lo) );
+                }
+                unsigned int lfsr1 = out_lo;
+                unsigned int lfsr2 = (out_hi << 13) | (out_lo >> 19);
+                unsigned int lfsr3 = out_hi >> 9;
 
-            /* lfsr2 */
-            tmask = (masks>>4)&0x0f;
-            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
-            out_hi = out_hi ^ (tval&0x0f);
-            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+                last_key_hi = out_hi;
+                last_key_lo = out_lo;
 
-            /* lfsr3 */
-            tmask = masks & 0x0f;
-            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
-            out_hi =  out_hi ^ (tval&0x0f);
-            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
-            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
-        }
-        for (int i=0; i<8 ; i++) {
-            int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
-            int masks = calcClockMask(clocks);
+                for (int i=0; i<25 ; i++) {
+                    int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+                    int masks = calcClockMask(clocks);
 
-            /* lfsr1 */
-            unsigned int tmask = (masks>>8)&0x0f;
-            unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
-            out_lo = (out_lo << 4) | (tval&0x0f);
-            unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
-            lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+                    /* lfsr1 */
+                    unsigned int tmask = (masks>>8)&0x0f;
+                    unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+                    unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+                    lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
 
-            /* lfsr2 */
-            tmask = (masks>>4)&0x0f;
-            tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
-            out_lo = out_lo ^ (tval&0x0f);
-            lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+                    /* lfsr2 */
+                    tmask = (masks>>4)&0x0f;
+                    tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+                    out_hi = out_hi ^ (tval&0x0f);
+                    lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
 
-            /* lfsr3 */
-            tmask = masks & 0x0f;
-            tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
-            out_lo =  out_lo ^ (tval&0x0f);
-            tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
-            lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
-        }
-        if (keysearch&&(target_hi==out_hi)&&(target_lo==out_lo)) {
-            /* report key as finishing state */
-            out_hi = last_key_hi;
-            out_lo = last_key_lo;
-            start_round = -1;
-            break;
+                    /* lfsr3 */
+                    tmask = masks & 0x0f;
+                    tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+                    tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+                    lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+                }
+                for (int i=0; i<8 ; i++) {
+                    int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+                    int masks = calcClockMask(clocks);
+
+                    /* lfsr1 */
+                    unsigned int tmask = (masks>>8)&0x0f;
+                    unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+                    unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+
+                    out_hi = (out_hi << 4) | (tval&0x0f);
+                    lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+
+                    /* lfsr2 */
+                    tmask = (masks>>4)&0x0f;
+                    tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+                    out_hi = out_hi ^ (tval&0x0f);
+                    lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+
+                    /* lfsr3 */
+                    tmask = masks & 0x0f;
+                    tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+                    out_hi =  out_hi ^ (tval&0x0f);
+                    tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+                    lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+                }
+                for (int i=0; i<8 ; i++) {
+                    int clocks = ((lfsr1<<3)&0xf00) | ((lfsr2>>3)&0xf0) | ((lfsr3>>7)&0xf);
+                    int masks = calcClockMask(clocks);
+
+                    /* lfsr1 */
+                    unsigned int tmask = (masks>>8)&0x0f;
+                    unsigned int tval = calcTable6bit(((lfsr1>>9)&0x3f0)|tmask);
+                    out_lo = (out_lo << 4) | (tval&0x0f);
+                    unsigned int tval2 = calcTable4bit(((lfsr1>>6)&0xf0)|tmask);
+                    lfsr1 = (lfsr1<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+
+                    /* lfsr2 */
+                    tmask = (masks>>4)&0x0f;
+                    tval = calcTable5bit(((lfsr2>>13)&0x1f0)|tmask);
+                    out_lo = out_lo ^ (tval&0x0f);
+                    lfsr2 = (lfsr2<<(masks>>12))^(tval>>4);
+
+                    /* lfsr3 */
+                    tmask = masks & 0x0f;
+                    tval = calcTable6bit(((lfsr3>>13)&0x3f0)|tmask);
+                    out_lo =  out_lo ^ (tval&0x0f);
+                    tval2 = calcTable4bit((lfsr3&0xf0)|tmask);
+                    lfsr3 = (lfsr3<<(tval2>>4))^(tval>>4)^(tval2&0x0f);
+                }
+                if (active) {
+                    if (endround) {
+                        out_hi = last_key_hi;
+                        out_lo = last_key_lo;
+                    }
+                    finished = true;
+                    break;
+                }
+            }
         }
     }
-
     // printf("Completed in %i ms\n", uSecs/1000);
 
     /* Report completed chains */
@@ -276,16 +292,17 @@ uint64_t a5test(
 
 int main(int argc, char const* argv[])
 {
-    uint64_t start_point =0x70d14a4d976961e9;// 0xef1dd70199e116f;
+    uint64_t start_point = 0xf5c8a2fed1b74d2e
+        ;
     uint32_t advance = 140;
     unsigned int start_round = 0;
     unsigned int stop_round = 0;
     unsigned int max_round = 8;
 
-    a5test(start_point, 1, max_round, max_round, advance);
-    //for (int i = 0; i < 8; i++) {
-      //  printf("%llx \n", a5test(start_point, i, max_round, max_round, advance));
-    //}
+    //    a5test(start_point, 1, max_round, max_round, advance);
+    for (int i = 0; i < 8; i++) {
+        printf("%llx \n", a5test(start_point, i, max_round, max_round, advance));
+    }
 
     return 0;
 }
