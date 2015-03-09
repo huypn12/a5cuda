@@ -4,7 +4,7 @@
 
 
 NVCC            = /usr/local/cuda/bin/nvcc
-NVCCFLAGS       = -O2 -gencode arch=compute_20,code=sm_21 -Xcompiler -fpic
+NVCCFLAGS       = -O3 -gencode arch=compute_20,code=sm_21 -Xcompiler -fpic
 CC              = g++ 
 CFLAGS          = -Wall -fPIC
 INCLUDE         = -I/usr/local/cuda/include
