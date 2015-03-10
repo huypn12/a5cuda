@@ -27,4 +27,4 @@ Advance.o: Advance.cpp Advance.h
 	$(CC) $(CFLAGS) -c Advance.cpp
 
 clean:
-	rm -rf *.o
+	rm -rf *.o *.so test/*.o test/*.so
