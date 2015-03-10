@@ -39,7 +39,7 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
 {
     mRunning = true;
     mMaxRound = max_rounds;
-    mCondition = 32 - condition;
+    mCondition = condition;
     processThread = new boost::thread(boost::bind(&A5Cuda::Process, this));
 }
 

@@ -1,5 +1,5 @@
 # Makefile for A5Cuda
-# Build to A5Cuda.o
+# Build to A5Cuda.so
 # Deploying on development environment, Ubuntu 1404, Cuda 6.5, GF104 Quadro 1000M
 
 

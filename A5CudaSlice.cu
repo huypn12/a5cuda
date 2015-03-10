@@ -34,7 +34,7 @@ A5CudaSlice::A5CudaSlice(
     mIterate   = 128;
     mMaxRound  = maxRound;
     mMaxCycles = 10*(2<<dp)*maxRound;
-    mDp        = 32 - dp;
+    mDp        = 32 - dp; // to deal with reversed bits 
     mDataSize  = 4096;
     mBlockSize = 512;
     mState     = eInit;

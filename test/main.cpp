@@ -29,6 +29,7 @@ int main(int argc, char* argv[]) {
                 plainrev = plainrev | (1ULL << (63 - j));
             }
         }
+        printf("%lx\n", plain);
         for (int k = 0; k < 8; k++) {
             struct timeval start_time;
             gettimeofday(&start_time, NULL);

@@ -233,7 +233,6 @@ __device__  void clock_major (unsigned int& R1, unsigned int& R2, unsigned int &
  * kernel, process each of 32 chains slot
  */
 __global__ void a51_cuda_kernel (
-        int streamIdx,
         unsigned int rounds,
         unsigned int size,
         unsigned int dp,
@@ -248,7 +247,6 @@ __global__ void a51_cuda_kernel (
     if (idx >= size) {
         return;
     }
-    idx += streamIdx * size;
 
     unsigned int res_lo = states[idx].x;
     unsigned int res_hi = states[idx].y;
