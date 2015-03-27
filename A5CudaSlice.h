@@ -34,21 +34,16 @@ class A5CudaSlice {
         unsigned int* d_control;
 
         void setValue(uint4 &slot, uint64_t value);
-        void setValueRev(uint4 &slot, uint64_t value);
         void setRf(uint4 &slot, uint64_t rf);
+        void setValueRev(uint4 &slot, uint64_t value);
         void setRfRev(uint4 &slot, uint64_t rf);
-        void setValueZero(uint4 &slot);
-        void setRfZero(uint4 &slot);
 
         uint64_t getValue(uint4 state);
-        uint64_t getValueRev(uint4 state);
         uint64_t getRf(uint4 state);
+        uint64_t getValueRev(uint4 state);
         uint64_t getRfRev(uint4 state);
 
-        void setState(uint4 &slot, uint64_t key, uint64_t advance);
-        void setStateRev(uint4 &slot, uint64_t key, uint64_t advance);
-        void setStateZero(uint4 &slot);
-
+        uint64_t reversebits(uint64_t, int);
         void init();
         void invokeKernel();
         void process();
