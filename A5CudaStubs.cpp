@@ -32,7 +32,7 @@ static void LoadDLL(void)
 {
     if (isDllError) return;
 
-    void* lHandle = dlopen("./A5Cuda.so", RTLD_LAZY | RTLD_GLOBAL);
+    void* lHandle = dlopen("./A5Cuda.so", RTLD_NOW | RTLD_GLOBAL);
 
     char* lError = dlerror();
     if (lError) {

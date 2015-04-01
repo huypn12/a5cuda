@@ -32,8 +32,8 @@ A5CudaSlice::A5CudaSlice(
     mMaxRound  = maxRound;
     mMaxCycles = 10*(2<<dp)*maxRound;
     mDp        = 32 - dp; // to deal with reversed bits 
-    mDataSize  = 4096;
-    mBlockSize = 512;
+    mDataSize  = 1024;
+    mBlockSize = 128;
     mState     = eInit;
     mJobs      = new A5Cuda::JobPiece_s[mDataSize];
 
@@ -47,20 +47,24 @@ A5CudaSlice::A5CudaSlice(
     checkCudaErrors(cudaHostRegister( hm_control, mDataSize * sizeof(unsigned int), CU_MEMHOSTALLOC_DEVICEMAP));
     checkCudaErrors(cudaHostGetDevicePointer( (void**)&d_control, hm_control, 0));
 
+    cudaStreamCreate(&mCudaStream);
 
+    init();
 }
 
 A5CudaSlice::~A5CudaSlice()
 {
+    cudaStreamSynchronize(mCudaStream);
+    cudaStreamDestroy(mCudaStream);
     cudaHostUnregister(hm_states);
     cudaHostUnregister(hm_control);
     delete [] mJobs;
-    cudaDeviceReset();
 }
 
 
 void A5CudaSlice::tick()
 {
+    /*
     switch (mState)
     {
         case eInit:
@@ -82,6 +86,11 @@ void A5CudaSlice::tick()
             std::cout << "state error" << std::endl;
             break;
 
+    }
+    */
+    if (cudaStreamQuery(mCudaStream) == cudaSuccess) {
+        process();
+        invokeKernel();
     }
 }
 
@@ -209,6 +218,7 @@ void A5CudaSlice::process()
                         tempRf                      = reversebits(tempRf, 64);
                         tempState                   ^= tempRf;
                         /*setStateRev(hm_states[i], tempState, tempRf);*/
+                        currentJob->cycles = 0;
                         setValue(hm_states[i], tempState);
                         setRf(hm_states[i], tempRf);
                         control=1;
@@ -220,6 +230,7 @@ void A5CudaSlice::process()
         if (currentJob->idle) {
             if (mController->PopRequest(currentJob)) {
                 currentJob->idle = false;
+                currentJob->cycles = 0;
                 setValueRev(hm_states[i], currentJob->start_value);
                 setRfRev(hm_states[i], currentJob->round_func[currentJob->start_round]);
             }
@@ -234,10 +245,10 @@ void A5CudaSlice::invokeKernel()
 {
     dim3 dimBlock(mBlockSize, 1);
     dim3 dimGrid((mDataSize - 1) / mBlockSize + 1, 1);
-    a51_cuda_kernel<<<dimBlock, dimGrid>>>(
+    a51_cuda_kernel<<<dimBlock, dimGrid, 0, mCudaStream>>>(
             mIterate, mDataSize, mDp, d_states, d_control);
 
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     return;
 }
 

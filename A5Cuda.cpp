@@ -40,7 +40,7 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
     mRunning = true;
     mMaxRound = max_rounds;
     mCondition = condition;
-    processThread = new boost::thread(boost::bind(&A5Cuda::Process, this));
+    mProcessThread = new std::thread(&A5Cuda::Process, this);
 }
 
 /**
@@ -51,7 +51,7 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
 A5Cuda::~A5Cuda()
 {
     mRunning = false;
-    processThread->join();
+    mProcessThread->join();
 }
 
 /**
@@ -190,10 +190,14 @@ bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value, void* contex
  * processing function, invoking each slice to change state
  * TODO: activate multiple slices from multiple devices
  */
+#define N_STREAMS 16
 void A5Cuda::Process()
 {
-    A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
-
+    //A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
+    A5CudaSlice* slices[N_STREAMS];
+    for (int i= 0; i < N_STREAMS; i++) {
+        slices[i] = new A5CudaSlice(this, 0, mCondition, mMaxRound);
+    }
     /**
      * TODO: each device has exactly 16 streams, scan over all stream to push new job
      */
@@ -206,13 +210,16 @@ void A5Cuda::Process()
         if (available == 0) {
             usleep(10);
         }
-
-        slice->tick();
+        for (int i = 0; i < N_STREAMS; i++) {
+            (*slices[i]).tick();
+        }
 
         if (!mRunning)
             break;
     }
-    delete slice;
+    for (int i=0; i < N_STREAMS; i++) {
+        delete slices[i];
+    }
 }
 
 extern "C" {

@@ -3,28 +3,31 @@
 # Deploying on development environment, Ubuntu 1404, Cuda 6.5, GF104 Quadro 1000M
 
 
-NVCC            = /usr/local/cuda/bin/nvcc
-NVCCFLAGS       = -O3 -gencode arch=compute_20,code=sm_21 -Xcompiler -fpic
-CC              = g++ 
-CFLAGS          = -Wall -fPIC
-INCLUDE         = -I/usr/local/cuda/include
-LD_LIBRARY_PATH = -fPIC -lstdc++ -ldl -L/usr/local/cuda/lib64 -lcuda -lcudart -L/usr/lib64 -lboost_system -lboost_thread
-LINKER          = gcc -shared 
+NVCC      = /usr/local/cuda/bin/nvcc
+NVCCFLAGS = -O3 -std=c++11 -Xcompiler -fPIC --compile --relocatable-device-code=false --default-stream per-thread
+GENCODE   = -gencode arch=compute_20,code=sm_21 -gencode arch=compute_30,code=sm_35
 
-all: A5Cuda.o A5CudaKernel.o A5CudaSlice.o Advance.o
-	$(LINKER) $(LD_LIBRARY_PATH) -o A5Cuda.so A5CudaKernel.o A5Cuda.o A5CudaSlice.o Advance.o
+LINKER  = $(NVCC)
+LDFLAGS = --cudart static --shared --relocatable-device-code=false -link
 
-A5CudaKernel.o: kernel/A5CudaKernel.cu kernel/A5CudaKernel.h
-	$(NVCC) $(NVCCFLAGS) -c kernel/A5CudaKernel.cu
+LIB_OBJS = kernel/A5CudaKernel.o A5CudaSlice.o A5Cuda.o Advance.o
 
-A5CudaSlice.o: A5CudaSlice.cu A5CudaSlice.h
-	$(NVCC) $(NVCCFLAGS) -c A5CudaSlice.cu
+all: A5Cuda.so
 
-A5Cuda.o: A5Cuda.cpp A5Cuda.h
-	$(CC) $(CFLAGS) $(INCLUDE) -c A5Cuda.cpp
+A5Cuda.so:$(LIB_OBJS)
+	$(LINKER) $(LDFLAGS) $(GENCODE) -o A5Cuda.so $(LIB_OBJS)
 
-Advance.o: Advance.cpp Advance.h
-	$(CC) $(CFLAGS) -c Advance.cpp
+kernel/A5CudaKernel.o:kernel/A5CudaKernel.cu 
+	$(NVCC) $(NVCCFLAGS) $(GENCODE) -x cu -o $@ -c $<
+
+A5CudaSlice.o:A5CudaSlice.cu
+	$(NVCC) $(NVCCFLAGS) $(GENCODE) -x cu -o $@ -c $<
+
+A5Cuda.o:A5Cuda.cpp 
+	$(NVCC) $(NVCCFLAGS) $(GENCODE) -x c++ -o $@ -c $<
+
+Advance.o:Advance.cpp 
+	$(NVCC) $(NVCCFLAGS) $(GENCODE) -x c++ -o $@ -c $<
 
 clean:
 	rm -rf *.o *.so test/*.o test/*.so

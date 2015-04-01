@@ -17,6 +17,7 @@ class A5CudaSlice {
         };
 
         eState mState;
+        cudaStream_t mCudaStream;
         unsigned int mDp;
         unsigned int mMaxCycles;
         unsigned int mMaxRound;

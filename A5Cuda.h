@@ -53,7 +53,8 @@
 #include <deque>
 #include <queue>
 
-#include <boost/thread/thread.hpp>
+#include <thread>
+#include <mutex>
 
 #include "Advance.h"
 
@@ -95,8 +96,8 @@ class A5Cuda
         // multithreading controller
         bool mRunning;
         // considering of c++11 std::mutex and std::thread
-        boost::mutex mMutex;
-        boost::thread* processThread;
+        std::mutex mMutex;
+        std::thread* mProcessThread;
 
         // chain shared common input
         unsigned int mCondition;
