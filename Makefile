@@ -5,7 +5,7 @@
 
 NVCC      = /usr/local/cuda/bin/nvcc
 NVCCFLAGS = -O3 -std=c++11 -Xcompiler -fPIC --compile --relocatable-device-code=false --default-stream per-thread
-GENCODE   = -gencode arch=compute_20,code=sm_21 -gencode arch=compute_30,code=sm_35
+GENCODE   = -gencode arch=compute_20,code=sm_21 -gencode arch=compute_30,code=sm_30
 
 LINKER  = $(NVCC)
 LDFLAGS = --cudart static --shared --relocatable-device-code=false -link

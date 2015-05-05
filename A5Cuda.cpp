@@ -190,7 +190,7 @@ bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value, void* contex
  * processing function, invoking each slice to change state
  * TODO: activate multiple slices from multiple devices
  */
-#define N_STREAMS 16
+#define N_STREAMS 8
 void A5Cuda::Process()
 {
     //A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
@@ -203,6 +203,7 @@ void A5Cuda::Process()
      */
     for (;;)
     {
+        /*
         mMutex.lock();
         int available = mInputStart.size();
         mMutex.unlock();
@@ -210,6 +211,7 @@ void A5Cuda::Process()
         if (available == 0) {
             usleep(10);
         }
+        */
         for (int i = 0; i < N_STREAMS; i++) {
             (*slices[i]).tick();
         }

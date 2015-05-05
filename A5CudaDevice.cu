@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 
 #include "utils/helper_cuda.h"
-#include "A5CudaSlice.h"
+#include "A5CudaDevice.h"
 
 
 void cuda_write_log(const char* str) {
@@ -16,7 +16,7 @@ void cuda_write_log(const char* str) {
     fclose(f_run);
 }
 
-A5CudaSlice::A5CudaSlice(
+A5CudaDevice::A5CudaDevice(
         A5Cuda* a5cuda,
         int deviceId,
         int dp,
@@ -24,10 +24,8 @@ A5CudaSlice::A5CudaSlice(
         )
 {
     // Initialize CUDA device parameters
+    // Each device has its own thread
     cudaSetDevice(deviceId);
-
-    // Create stream
-    cudaStreamCreate(&mCudaStream);
 
     // Initialize running parameters
     mController = a5cuda;
@@ -38,8 +36,6 @@ A5CudaSlice::A5CudaSlice(
     mDataSize  = 512;
     mBlockSize = 128;
     mState     = eInit;
-
-    // Memory allocation
     mJobs      = new A5Cuda::JobPiece_s[mDataSize];
 
     uint4* h_UAstates = (uint4*) malloc(mDataSize*sizeof(uint4) + MEMORY_ALIGNMENT);
@@ -52,7 +48,56 @@ A5CudaSlice::A5CudaSlice(
     checkCudaErrors(cudaHostRegister( hm_control, mDataSize * sizeof(unsigned int), CU_MEMHOSTALLOC_DEVICEMAP));
     checkCudaErrors(cudaHostGetDevicePointer( (void**)&d_control, hm_control, 0));
 
-    //TODO: move all running parameter such as 
+    cudaStreamCreate(&mCudaStream);
+
+    init();
+}
+
+A5CudaDevice::~A5CudaDevice()
+{
+    cudaStreamSynchronize(mCudaStream);
+    cudaStreamDestroy(mCudaStream);
+    cudaHostUnregister(hm_states);
+    cudaHostUnregister(hm_control);
+    delete [] mJobs;
+}
+
+
+void A5CudaDevice::tick()
+{
+    /*
+    switch (mState)
+    {
+        case eInit:
+            init();
+            mState = eProcess;
+            break;
+
+        case eKernel:
+            invokeKernel();
+            mState = eProcess;
+            break;
+
+        case eProcess:
+            process();
+            mState = eKernel;
+            break;
+
+        default:
+            std::cout << "state error" << std::endl;
+            break;
+
+    }
+    */
+    if (cudaStreamQuery(mCudaStream) == cudaSuccess) {
+        process();
+        invokeKernel();
+    }
+}
+
+
+void A5CudaDevice::init()
+{
     for (unsigned int i = 0; i < mDataSize; i++)
     {
         mJobs[i].start_value   = 0;
@@ -69,29 +114,69 @@ A5CudaSlice::A5CudaSlice(
         hm_states[i].w         = 0;
         hm_states[i].z         = 0;
     }
-
 }
 
-A5CudaSlice::~A5CudaSlice()
+uint64_t A5CudaDevice::reversebits (uint64_t R, int length)
 {
-    cudaStreamSynchronize(mCudaStream);
-    cudaStreamDestroy(mCudaStream);
-    cudaHostUnregister(hm_states);
-    cudaHostUnregister(hm_control);
-    free(h_UAstates);
-    free(h_UAcontrol);
-    delete [] mJobs;
+    R = ((R >> 1) & 0x5555555555555555) | ((R & 0x5555555555555555) << 1);
+    // swap consecutive pairs
+    R = ((R >> 2) & 0x3333333333333333) | ((R & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    R = ((R >> 4) & 0x0F0F0F0F0F0F0F0F) | ((R & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    R = ((R >> 8) & 0x00FF00FF00FF00FF) | ((R & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    R = ((R >> 16) & 0x0000FFFF0000FFFF) | ((R & 0x0000FFFF0000FFFF)  << 16);
+    // last
+    R = ( (R >> 32) | (R << 32));
+
+    R = R >> (64-length);
+    return R;
 }
 
-void A5CudaSlice::tick()
+void A5CudaDevice::setValue(uint4 &slot, uint64_t value)
 {
-    if (cudaStreamQuery(mCudaStream) == cudaSuccess) {
-        process();
-        invokeKernel();
-    }
+    slot.x = (unsigned int) value;
+    slot.y = (unsigned int) (value >> 32);
 }
 
-void A5CudaSlice::process()
+void A5CudaDevice::setRf(uint4 &slot, uint64_t rf)
+{
+    slot.z = (unsigned int) rf;
+    slot.w = (unsigned int) (rf >> 32);
+}
+
+uint64_t A5CudaDevice::getValue(uint4 state)
+{
+    return (((uint64_t) state.y << 32) | state.x);
+}
+
+uint64_t A5CudaDevice::getRf(uint4 state)
+{
+    return (((uint64_t) state.w << 32) | state.z);
+}
+
+void A5CudaDevice::setValueRev(uint4 &slot, uint64_t value)
+{
+    setValue(slot, reversebits(value, 64));
+}
+
+void A5CudaDevice::setRfRev(uint4 &slot, uint64_t rf)
+{
+    setRf(slot, reversebits(rf, 64));
+}
+
+uint64_t A5CudaDevice::getValueRev(uint4 state)
+{
+    return reversebits(((uint64_t) state.y << 32) | state.x, 64);
+}
+
+uint64_t A5CudaDevice::getRfRev(uint4 state)
+{
+    return reversebits(((uint64_t) state.w << 32) | state.z, 64);
+}
+
+void A5CudaDevice::process()
 {
 
     for (unsigned int i = 0; i < mDataSize; i++) {
@@ -157,7 +242,7 @@ void A5CudaSlice::process()
 }
 
 // TODO: move mIterate to constant
-void A5CudaSlice::invokeKernel()
+void A5CudaDevice::invokeKernel()
 {
     dim3 dimBlock(mBlockSize, 1);
     dim3 dimGrid((mDataSize - 1) / mBlockSize + 1, 1);
@@ -166,65 +251,5 @@ void A5CudaSlice::invokeKernel()
 
     //cudaDeviceSynchronize();
     return;
-}
-
-uint64_t A5CudaSlice::reversebits (uint64_t R, int length)
-{
-    R = ((R >> 1) & 0x5555555555555555) | ((R & 0x5555555555555555) << 1);
-    // swap consecutive pairs
-    R = ((R >> 2) & 0x3333333333333333) | ((R & 0x3333333333333333) << 2);
-    // swap nibbles ...
-    R = ((R >> 4) & 0x0F0F0F0F0F0F0F0F) | ((R & 0x0F0F0F0F0F0F0F0F) << 4);
-    // swap bytes
-    R = ((R >> 8) & 0x00FF00FF00FF00FF) | ((R & 0x00FF00FF00FF00FF) << 8);
-    // swap 2-byte long pairs
-    R = ((R >> 16) & 0x0000FFFF0000FFFF) | ((R & 0x0000FFFF0000FFFF)  << 16);
-    // last
-    R = ( (R >> 32) | (R << 32));
-
-    R = R >> (64-length);
-    return R;
-}
-
-void A5CudaSlice::setValue(uint4 &slot, uint64_t value)
-{
-    slot.x = (unsigned int) value;
-    slot.y = (unsigned int) (value >> 32);
-}
-
-void A5CudaSlice::setRf(uint4 &slot, uint64_t rf)
-{
-    slot.z = (unsigned int) rf;
-    slot.w = (unsigned int) (rf >> 32);
-}
-
-uint64_t A5CudaSlice::getValue(uint4 state)
-{
-    return (((uint64_t) state.y << 32) | state.x);
-}
-
-uint64_t A5CudaSlice::getRf(uint4 state)
-{
-    return (((uint64_t) state.w << 32) | state.z);
-}
-
-void A5CudaSlice::setValueRev(uint4 &slot, uint64_t value)
-{
-    setValue(slot, reversebits(value, 64));
-}
-
-void A5CudaSlice::setRfRev(uint4 &slot, uint64_t rf)
-{
-    setRf(slot, reversebits(rf, 64));
-}
-
-uint64_t A5CudaSlice::getValueRev(uint4 state)
-{
-    return reversebits(((uint64_t) state.y << 32) | state.x, 64);
-}
-
-uint64_t A5CudaSlice::getRfRev(uint4 state)
-{
-    return reversebits(((uint64_t) state.w << 32) | state.z, 64);
 }
 

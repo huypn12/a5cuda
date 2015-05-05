@@ -29,6 +29,8 @@ class A5CudaSlice {
 
         bool isRunning;
 
+        uint4* h_UAstates;
+        uint4* h_UAcontrol;
         uint4* hm_states;
         uint4* d_states;
         unsigned int* hm_control;
