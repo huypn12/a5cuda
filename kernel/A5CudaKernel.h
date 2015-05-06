@@ -8,7 +8,7 @@ extern "C"
 
 #define N_LFSR_CONSTANTS 9
 
-__constant__ unsigned int LFSR_CONSTANTS[N_LFSR_CONSTANTS] = {
+__constant__ unsigned int LFSR_CONSTANTS[ N_LFSR_CONSTANTS ] = {
     0x000100, 0x000400, 0x000400,   // CLK
     0x072000, 0x300000, 0x700080,   // TAPS
     0x040000, 0x200000, 0x400000    // OUT
@@ -26,15 +26,18 @@ __constant__ unsigned int LFSR_CONSTANTS[N_LFSR_CONSTANTS] = {
 #define R2OUT LFSR_CONSTANTS[8]
 #define R3OUT LFSR_CONSTANTS[9]
 
-__constant__ unsigned int RUNNING_PARAM_CONSTANTS[4];
-//{ROUNDS, DATA_SIZE, DPS}
+__constant__ unsigned int RUNNING_PARAM_CONSTANTS[ 4 ]; //{ROUNDS, DATA_SIZE, DPS}
+#define M_ITERCOUNT RUNNING_PARAM_CONSTANTS[0]
+#define M_DPS RUNNING_PARAM_CONSTANTS[1]
+#define M_DATASIZE RUNNING_PARAM_CONSTANTS[2]
+
 __global__ void a51_cuda_kernel(
         /*
         unsigned int rounds,
         unsigned int size,
         unsigned int dps,
         */
-        uint4* stopVals,
+        uint4* states,
         unsigned int* finished
 );
 

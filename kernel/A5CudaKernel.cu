@@ -16,7 +16,7 @@
 #define R1OUT   0x040000
 #define R2OUT   0x200000
 #define R3OUT   0x400000
-*/
+ */
 
 // Calculate parity
 __device__  int parity32(uint64_t x)
@@ -96,26 +96,29 @@ __device__  void clock_major (unsigned int& R1, unsigned int& R2, unsigned int &
  * kernel, process each of 32 chains slot
  */
 __global__ void a51_cuda_kernel (
-        unsigned int rounds,
-        unsigned int size,
-        unsigned int dp,
+        /*
+           unsigned int rounds,
+           unsigned int size,
+           unsigned int dp,
+         */
         uint4* states,
         unsigned int* controls
         )
 {
     // huyphung: bitsliced, using 4x32 bit integer instead of 2x64 bit word
 
-    int idx;
-    idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= M_DATASIZE) {
         return;
     }
 
-    unsigned int res_lo = states[idx].x;
-    unsigned int res_hi = states[idx].y;
-    unsigned int key_lo = states[idx].z;
-    unsigned int key_hi = states[idx].w;
+    uint4 state = states[idx];
     unsigned int control = controls[idx];
+
+    unsigned int res_lo = state.x;
+    unsigned int res_hi = state.y;
+    unsigned int key_lo = state.z;
+    unsigned int key_hi = state.w;
     unsigned int last_key_hi = 0;
     unsigned int last_key_lo = 0;
 
@@ -123,24 +126,26 @@ __global__ void a51_cuda_kernel (
     unsigned int R2;
     unsigned int R3;
 
+    unsigned int tval;
+
     if ((res_hi | res_lo) == 0) {
         return;
     }
 
-    for (register int r = 0; r < rounds; r++) {
+    for (int r = 0; r < M_ITERCOUNT; r++) {
         last_key_hi = res_hi;
         last_key_lo = res_lo;
         res_hi ^= key_hi;
         res_lo ^= key_lo;
 
         /* //This statement cause slowdown by broking memory coalescing
-        if (((res_hi >> dp) | control[idx]) == 0) {
-            states[idx].x = last_key_lo;
-            states[idx].y = last_key_hi;
-            return;
-        }
-        */
-        if (((res_hi >> dp) | control) == 0) {
+           if (((res_hi >> dp) | control[idx]) == 0) {
+           states[idx].x = last_key_lo;
+           states[idx].y = last_key_hi;
+           return;
+           }
+         */
+        if (((res_hi >> M_DPS) | control) == 0) {
             res_hi = last_key_hi;
             res_lo = last_key_lo;
             break;
@@ -160,7 +165,7 @@ __global__ void a51_cuda_kernel (
 
         // TODO: reduce reversebit step in kernel by change output method
         // saved clocking
-        unsigned int tval = 0;
+        tval = 0;
 
         res_hi = 0ULL;
         for (int i = 0; i < 32; ) {
@@ -179,6 +184,8 @@ __global__ void a51_cuda_kernel (
         }
 
     }
+
     states[idx].x = res_lo;
     states[idx].y = res_hi;
 }
+
