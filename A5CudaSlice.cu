@@ -42,9 +42,9 @@ A5CudaSlice::A5CudaSlice(
 
 A5CudaSlice::~A5CudaSlice()
 {
-    cudaStreamDestroy(mCudaStream);
     cudaHostUnregister(hm_states);
     cudaHostUnregister(hm_control);
+    free(mStreamArray);
     free(h_UAstates);
     free(h_UAcontrol);
     delete [] mJobs;
@@ -65,6 +65,7 @@ void A5CudaSlice::workingLoop()
         probeStreams(i);
     }
     // Clean exit
+    synchronizeStreams();
 }
 
 void A5CudaSlice::initialize() {
@@ -126,6 +127,20 @@ void A5CudaSlice::probeStreams()
             process(i);
             invokeKernel(i);
         }
+    }
+}
+
+void A5CudaSlice::synchronizeStreams()
+{
+    for (int i = 0; i < mStreamCount; i++) {
+        checkCudaErrors( cudaStreamSynchronize(mCudaStream[i]));
+    }
+}
+
+void A5CudaSlice::destroyStreams()
+{
+    for (int i = 0; i < mStreamCount; i++) {
+        checkCudaErrors( cudaStreamDestroy(mStreamArray[i]));
     }
 }
 
@@ -198,11 +213,9 @@ void A5CudaSlice::process(i)
 void A5CudaSlice::invokeKernel(i)
 {
     dim3 dimBlock(mBlockSize, 1);
-    dim3 dimGrid((mDataSize - 1) / mBlockSize + 1, 1);
-    a51_cuda_kernel<<<dimBlock, dimGrid, 0, mStreamArray[i]>>>( //mIterate, mDataSize, mDp,
-            d_states, d_control);
+    dim3 dimGrid((mOffset - 1) / mBlockSize + 1, 1);
+    a51_cuda_kernel<<<dimBlock, dimGrid, 0, mStreamArray[i]>>>(d_states, d_control);
 
-    //cudaDeviceSynchronize();
     return;
 }
 
