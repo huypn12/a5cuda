@@ -27,6 +27,12 @@
 #include "A5Cuda.h"
 #include "A5CudaSlice.h"
 
+#include "utils/helper_cuda.h"
+int getGpuCount() {
+    int deviceCount;
+    checkCudaErrors(cudaGetDeviceCount(&deviceCount));
+    return deviceCount;
+}
 
 /*
  * Author: Huy Phung
@@ -40,7 +46,13 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
     mRunning = true;
     mMaxRound = max_rounds;
     mCondition = condition;
-    mProcessThread = new std::thread(&A5Cuda::Process, this);
+    //mProcessThread = new std::thread(&A5Cuda::Process, this);
+    int nGpus = getGpuCount();
+    std::vector<A5CudaSlice*> a5slices(nGpus);
+    for(int i = 0; i < nGpus; i++) {
+        a5slices[i] = new A5CudaSlice(this, i, mCondition, mMaxRound);
+    }
+
 }
 
 /**
@@ -51,7 +63,8 @@ A5Cuda::A5Cuda(uint32_t max_rounds, int condition)
 A5Cuda::~A5Cuda()
 {
     mRunning = false;
-    mProcessThread->join();
+    //delete a5slices;
+    //mProcessThread->join();
 }
 
 /**
@@ -190,20 +203,19 @@ bool A5Cuda::PopResult(uint64_t& start_value, uint64_t& stop_value, void* contex
  * processing function, invoking each slice to change state
  * TODO: activate multiple slices from multiple devices
  */
+/*
 #define N_STREAMS 8
 void A5Cuda::Process()
 {
     //A5CudaSlice* slice = new A5CudaSlice(this, 0, mCondition, mMaxRound);
+
     A5CudaSlice* slices[N_STREAMS];
     for (int i= 0; i < N_STREAMS; i++) {
         slices[i] = new A5CudaSlice(this, 0, mCondition, mMaxRound);
     }
-    /**
-     * TODO: each device has exactly 16 streams, scan over all stream to push new job
-     */
     for (;;)
     {
-        /*
+
         mMutex.lock();
         int available = mInputStart.size();
         mMutex.unlock();
@@ -211,7 +223,7 @@ void A5Cuda::Process()
         if (available == 0) {
             usleep(10);
         }
-        */
+
         for (int i = 0; i < N_STREAMS; i++) {
             (*slices[i]).tick();
         }
@@ -223,7 +235,7 @@ void A5Cuda::Process()
         delete slices[i];
     }
 }
-
+*/
 extern "C" {
     static class A5Cuda* a5Instance = 0;
 

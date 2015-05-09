@@ -27,9 +27,9 @@ A5CudaSlice::A5CudaSlice(
     mDeviceId = deviceId;
     mBlockSize = 128;
     mStreamCount = 8;
-    mOffset = 4096;
+    mOffset = 512;
     mDataSize = mStreamCount * mOffset;
-
+    mRunning = true;
     mController = a5cuda;
     mMaxRound  = maxRound;
     mIterate   = 128;
@@ -37,11 +37,13 @@ A5CudaSlice::A5CudaSlice(
     mDp        = 32 - dp; // to deal with reversed bits 
 
     // Invoking running loop
-    mRunningThread = new std::thread(workingLoop);
+    mRunningThread = new std::thread(&A5CudaSlice::workingLoop, this);
 }
 
 A5CudaSlice::~A5CudaSlice()
 {
+    halt();
+    delete mRunningThread;
     cudaHostUnregister(hm_states);
     cudaHostUnregister(hm_control);
     free(mStreamArray);
@@ -50,25 +52,26 @@ A5CudaSlice::~A5CudaSlice()
     delete [] mJobs;
 }
 
-void A5CudaSlice::stopDevice()
+void A5CudaSlice::halt()
 {
     mRunning = false;
-    mRunningThread.join();
+    destroyStreams();
+    mRunningThread->join();
 }
 
 void A5CudaSlice::workingLoop()
 {
     checkCudaErrors( cudaSetDevice(mDeviceId) );
     checkCudaErrors( cudaGetDeviceProperties(&mCudaDeviceProp, mDeviceId) );
-    initialize();
+    init();
     while (mRunning) {
-        probeStreams(i);
+        probeStreams();
     }
     // Clean exit
-    synchronizeStreams();
+    syncStreams();
 }
 
-void A5CudaSlice::initialize() {
+void A5CudaSlice::init() {
     // Create streams to concurrently execute kernels
     mStreamArray = (cudaStream_t *) malloc(mStreamCount * sizeof(cudaStream_t));
     for (int i = 0; i < mStreamCount; i ++) {
@@ -76,16 +79,15 @@ void A5CudaSlice::initialize() {
     }
 
     // Copying running parameters to constant memory
-    const N_RUNNING_PARAM_CONSTANTS 4;
     unsigned int running_parameters[N_RUNNING_PARAM_CONSTANTS] = {
-        mMaxRound,
+        mIterate,
         mDp,
-        mDataSize
-    }
+        mOffset
+    };
     checkCudaErrors(cudaMemcpyToSymbol(
                 RUNNING_PARAM_CONSTANTS,
-                running_parameters,
-                N_RUNNING_PARAM_CONSTANTS*sizeof(unsigned int)));
+                (void*)running_parameters,
+                4*sizeof(unsigned int)));
 
     // Memory allocation
     mJobs = new A5Cuda::JobPiece_s[mDataSize];
@@ -122,72 +124,64 @@ void A5CudaSlice::initialize() {
 
 void A5CudaSlice::probeStreams()
 {
-    for (int i=0; i < mStreamCount; i++) {
-        if (cudaStreamQuery(mCudaStream[i]) == cudaSuccess) {
-            process(i);
-            invokeKernel(i);
+    for (int streamIdx=0; streamIdx < mStreamCount; streamIdx++) {
+        if (cudaStreamQuery(mStreamArray[streamIdx]) == cudaSuccess) {
+            process(streamIdx);
+            invokeKernel(streamIdx);
         }
     }
 }
 
-void A5CudaSlice::synchronizeStreams()
+void A5CudaSlice::syncStreams()
 {
     for (int i = 0; i < mStreamCount; i++) {
-        checkCudaErrors( cudaStreamSynchronize(mCudaStream[i]));
+        checkCudaErrors( cudaStreamSynchronize(mStreamArray[i]) );
     }
 }
 
 void A5CudaSlice::destroyStreams()
 {
     for (int i = 0; i < mStreamCount; i++) {
-        checkCudaErrors( cudaStreamDestroy(mStreamArray[i]));
+        checkCudaErrors( cudaStreamDestroy(mStreamArray[i]) );
     }
 }
 
-void A5CudaSlice::process(i)
+void A5CudaSlice::process(int idx)
 {
-    int startIdx = i * mOffset;
+    int startIdx = idx * mOffset;
     int stopIdx = startIdx + mOffset;
     for (int i = startIdx; i < stopIdx; i++) {
         A5Cuda::JobPiece_s* currentJob = &mJobs[i];
-        currentJob->cycles += mIterate;
-
         unsigned int control = 0;
         unsigned int dp_bits = (hm_states[i].y ^ hm_states[i].w) >> mDp;
         dp_bits = dp_bits | hm_control[i];
-
+        uint64_t tempState = getValue(hm_states[i]);
+        uint64_t tempRf    = getRf(hm_states[i]);
         if (!currentJob->idle) {
+            currentJob->cycles += mIterate;
             bool intMerge = currentJob->cycles > mMaxCycles;
             if (intMerge) {
                 currentJob->end_value = 0xffffffffffffffffULL;
                 mController->PushResult(currentJob);
                 currentJob->idle = true;
-
             } else {
                 if(dp_bits == 0){
-                    uint64_t tempState = getValue(hm_states[i]);//((uint64_t) hm_states[i].y << 32) | hm_states[i].x;
-                    uint64_t tempRf    = getRf(hm_states[i]);//((uint64_t) hm_states[i].w << 32) | hm_states[i].z;
                     if (currentJob->current_round == currentJob->end_round) {
-
                         if (currentJob->end_round == mMaxRound - 1) {
                             currentJob->end_value = reversebits(tempState ^ tempRf, 64);
                             mController->PushResult(currentJob);
                             currentJob->idle = true;
-
                         } else if (currentJob->end_round < mMaxRound - 1) {
                             currentJob->end_value = reversebits(tempState ^ tempRf, 64);
                             mController->PushResult(currentJob);
                             currentJob->idle = true;
                         }
-
                     } else if (currentJob->current_round < currentJob->end_round) {
                         tempState                   = tempState ^ tempRf;
-                        /*tempState                   = reversebits(tempState, 64);*/
                         currentJob->current_round   += 1;
                         tempRf                      = currentJob->round_func[currentJob->current_round];
                         tempRf                      = reversebits(tempRf, 64);
                         tempState                   ^= tempRf;
-                        /*setStateRev(hm_states[i], tempState, tempRf);*/
                         currentJob->cycles = 0;
                         setValue(hm_states[i], tempState);
                         setRf(hm_states[i], tempRf);
@@ -210,12 +204,14 @@ void A5CudaSlice::process(i)
 }
 
 // TODO: move mIterate to constant
-void A5CudaSlice::invokeKernel(i)
+void A5CudaSlice::invokeKernel(int idx)
 {
     dim3 dimBlock(mBlockSize, 1);
     dim3 dimGrid((mOffset - 1) / mBlockSize + 1, 1);
-    a51_cuda_kernel<<<dimBlock, dimGrid, 0, mStreamArray[i]>>>(d_states, d_control);
-
+    a51_cuda_kernel<<<dimBlock, dimGrid, 0, mStreamArray[idx]>>>(
+            &(d_states[idx*mOffset]),//&(d_states[i*mOffset]),
+            &(d_control[idx*mOffset])//&(d_control[i*mOffset])
+            );
     return;
 }
 
@@ -279,12 +275,12 @@ uint64_t A5CudaSlice::getRfRev(uint4 state)
     return reversebits(((uint64_t) state.w << 32) | state.z, 64);
 }
 
-void A5CudaSlice::tick()
-{
-    if (cudaStreamQuery(mCudaStream) == cudaSuccess) {
-        process();
-        invokeKernel();
-    }
-}
+/*void A5CudaSlice::tick()*/
+/*{*/
+    /*if (cudaStreamQuery(mCudaStream) == cudaSuccess) {*/
+        /*process();*/
+        /*invokeKernel();*/
+    /*}*/
+/*}*/
 
 

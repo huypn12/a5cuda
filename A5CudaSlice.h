@@ -10,9 +10,10 @@ class A5Cuda;
 
 class A5CudaSlice {
     private:
-        std::thread workingThread;
+        std::thread* mRunningThread;
 
-        eState mState;
+        int mDeviceId;
+        cudaDeviceProp mCudaDeviceProp;
         cudaStream_t *mStreamArray;
         unsigned int mStreamCount;
         unsigned int mDataSize;
@@ -45,9 +46,14 @@ class A5CudaSlice {
         uint64_t getValueRev(uint4 state);
         uint64_t getRfRev(uint4 state);
 
+        void workingLoop();
         void init();
-        void invokeKernel();
-        void process();
+        void probeStreams();
+        void syncStreams();
+        void destroyStreams();
+        void halt();
+        void invokeKernel(int streamIdx);
+        void process(int streamIdx);
 
     public:
         A5CudaSlice(A5Cuda* controller, int deviceId, int dp, unsigned int maxRound);

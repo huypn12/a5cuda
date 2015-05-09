@@ -108,7 +108,7 @@ __global__ void a51_cuda_kernel (
     // huyphung: bitsliced, using 4x32 bit integer instead of 2x64 bit word
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= M_DATASIZE) {
+    if (idx >= (512)) {
         return;
     }
 
@@ -132,7 +132,7 @@ __global__ void a51_cuda_kernel (
         return;
     }
 
-    for (int r = 0; r < M_ITERCOUNT; r++) {
+    for (register int r = 0; r < 256; r++) {
         last_key_hi = res_hi;
         last_key_lo = res_lo;
         res_hi ^= key_hi;
@@ -145,7 +145,7 @@ __global__ void a51_cuda_kernel (
            return;
            }
          */
-        if (((res_hi >> M_DPS) | control) == 0) {
+        if (((res_hi >> 20) | control) == 0) {
             res_hi = last_key_hi;
             res_lo = last_key_lo;
             break;
@@ -168,24 +168,22 @@ __global__ void a51_cuda_kernel (
         tval = 0;
 
         res_hi = 0ULL;
-        for (int i = 0; i < 32; ) {
+        for (register int i = 0; i < 32; i++) {
             clock_major(R1, R2, R3);
             tval = ((R1>>18)^(R2>>21)^(R3>>22)) & 0x1;
             res_hi = res_hi | (tval << (31-i));
-            i += 2;
         }
 
         res_lo = 0ULL;
-        for (int i = 0; i < 32; ) {
+        for (register int i = 0; i < 32; i++) {
             clock_major(R1, R2, R3);
             tval = ((R1>>18)^(R2>>21)^(R3>>22)) & 0x1;
             res_lo = res_lo | (tval << (31-i));
-            i += 2;
         }
 
     }
-
     states[idx].x = res_lo;
     states[idx].y = res_hi;
+    __syncthreads();
 }
 

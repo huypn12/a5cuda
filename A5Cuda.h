@@ -98,7 +98,7 @@ class A5Cuda
         // considering of c++11 std::mutex and std::thread
         std::mutex mMutex;
         std::thread* mProcessThread;
-
+        std::vector<A5CudaSlice> mSlices;
         // chain shared common input
         unsigned int mCondition;
         unsigned int mMaxRound;

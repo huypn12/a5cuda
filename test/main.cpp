@@ -20,6 +20,8 @@ int main(int argc, char* argv[]) {
     }
     samples -= 63;
     int submitted = 0;
+    struct timeval start_time;
+    gettimeofday(&start_time, NULL);
     for (int i = 0; i < samples; i++) {
         uint64_t plain = 0;
         uint64_t plainrev = 0;
@@ -31,18 +33,16 @@ int main(int argc, char* argv[]) {
         }
         printf("%lx\n", plain);
         for (int k = 0; k < 8; k++) {
-            struct timeval start_time;
-            gettimeofday(&start_time, NULL);
-            A5CudaSubmit(plain, k, 140, dummy);
-            while (not A5CudaPopResult(start_val, stop_val, (void**) &dummy)) {
-            }
-            struct timeval stop_time;
-            gettimeofday(&stop_time, NULL);
-            unsigned long diff = 1000000 * (stop_time.tv_sec - start_time.tv_sec);
-            diff += stop_time.tv_usec - start_time.tv_usec;
-            printf("(%d,%d) %i msec\t Start value=%llx\tStop value=%llx\n", i,k, (int) (diff / 1000), start_val,
-                    stop_val);
+            for (int c = 0; c < 999999; c++)
+                A5CudaSubmit(plain, k, 140, dummy);
         }
     }
+    while (not A5CudaPopResult(start_val, stop_val, (void**) &dummy)) {
+    }
+    struct timeval stop_time;
+    gettimeofday(&stop_time, NULL);
+    unsigned long diff = 1000000 * (stop_time.tv_sec - start_time.tv_sec);
+    diff += stop_time.tv_usec - start_time.tv_usec;
+    printf("%i msec\t\n", (int) (diff / 1000));
     A5CudaShutdown();
 }
