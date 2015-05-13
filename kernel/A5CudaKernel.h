@@ -4,7 +4,6 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
-extern "C"
 
 #define N_LFSR_CONSTANTS 9
 __device__ __constant__ unsigned int LFSR_CONSTANTS[ N_LFSR_CONSTANTS ] = {
