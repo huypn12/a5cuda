@@ -108,7 +108,7 @@ __global__ void a51_cuda_kernel (
     // huyphung: bitsliced, using 4x32 bit integer instead of 2x64 bit word
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= (512)) {
+    if (idx >= (M_DATASIZE)) {
         return;
     }
 
@@ -132,7 +132,7 @@ __global__ void a51_cuda_kernel (
         return;
     }
 
-    for (register int r = 0; r < 256; r++) {
+    for (register int r = 0; r < M_ITERCOUNT; r++) {
         last_key_hi = res_hi;
         last_key_lo = res_lo;
         res_hi ^= key_hi;
@@ -145,7 +145,7 @@ __global__ void a51_cuda_kernel (
            return;
            }
          */
-        if (((res_hi >> 20) | control) == 0) {
+        if (((res_hi >> M_DPS) | control) == 0) {
             res_hi = last_key_hi;
             res_lo = last_key_lo;
             break;
