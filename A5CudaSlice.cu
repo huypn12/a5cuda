@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 
 #include "utils/helper_cuda.h"
+#include "kernel/A5CudaKernel.h"
 #include "A5CudaSlice.h"
 
 
@@ -79,16 +80,22 @@ void A5CudaSlice::init() {
     }
 
     // Copying running parameters to constant memory
-    unsigned int running_parameters[N_RUNNING_PARAM_CONSTANTS] = {
-        mIterate,
-        mDp,
-        mOffset
-    };
-    checkCudaErrors(cudaMemcpyToSymbol(
-                RUNNING_PARAM_CONSTANTS,
-                (void*)running_parameters,
-                4*sizeof(unsigned int)));
+    unsigned int running_parameters[4];
+    running_parameters[0] = mIterate;
+    running_parameters[1] = mDp;
+    running_parameters[2] = mOffset;
+    running_parameters[3] = 0;
 
+    // huy.phung: workaround, given the fact that (1) constant memory manipulating function must be in the same scope with declaration
+    //      and so (2) #include -ing the declaration of constant memory here must lead to invalid symbol copy
+    void *kernel_param_const_ptr;
+    checkCudaErrors( copy_kernel_constants(running_parameters) );
+    /*
+    checkCudaErrors(cudaMemcpyToSymbol(
+                kernel_param_const_ptr,
+                running_parameters,
+                4*sizeof(unsigned int)));
+    */
     // Memory allocation
     mJobs = new A5Cuda::JobPiece_s[mDataSize];
 
@@ -125,6 +132,9 @@ void A5CudaSlice::init() {
 void A5CudaSlice::probeStreams()
 {
     for (int streamIdx=0; streamIdx < mStreamCount; streamIdx++) {
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) 
+                printf("Error: %s\n", cudaGetErrorString(err));
         if (cudaStreamQuery(mStreamArray[streamIdx]) == cudaSuccess) {
             process(streamIdx);
             invokeKernel(streamIdx);

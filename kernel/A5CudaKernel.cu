@@ -1,25 +1,38 @@
 #include "A5CudaKernel.h"
 
-/*
-// Clock bit$
-#define R1CLK   0x000100
-#define R2CLK   0x000400
-#define R3CLK   0x000400
+#define N_LFSR_CONSTANTS 9
+__device__ __constant__ unsigned int LFSR_CONSTANTS[ N_LFSR_CONSTANTS ] = {
+    0x000100, 0x000400, 0x000400,   // CLK
+    0x072000, 0x300000, 0x700080,   // TAPS
+    0x040000, 0x200000, 0x400000    // OUT
+};
 
-// Feedback tapping bits
-#define R1TAPS  0x072000
-#define R2TAPS  0x300000
-#define R3TAPS  0x700080
+#define R1CLK   LFSR_CONSTANTS[0]
+#define R2CLK   LFSR_CONSTANTS[1]
+#define R3CLK   LFSR_CONSTANTS[2]
 
-// huyphung: seeking for an alternative for this mask
-// Output tapping bits
-#define R1OUT   0x040000
-#define R2OUT   0x200000
-#define R3OUT   0x400000
- */
+#define R1TAPS  LFSR_CONSTANTS[3]
+#define R2TAPS  LFSR_CONSTANTS[4]
+#define R3TAPS  LFSR_CONSTANTS[5]
+
+#define R1OUT   LFSR_CONSTANTS[6]
+#define R2OUT   LFSR_CONSTANTS[7]
+#define R3OUT   LFSR_CONSTANTS[8]
+
+#define N_RUNNING_PARAM_CONSTANTS 4
+__device__ __constant__ unsigned int RUNNING_PARAM_CONSTANTS[ N_RUNNING_PARAM_CONSTANTS ];
+
+#define M_ITERCOUNT     RUNNING_PARAM_CONSTANTS[0]
+#define M_DPS           RUNNING_PARAM_CONSTANTS[1]
+#define M_DATASIZE      RUNNING_PARAM_CONSTANTS[2]
+
+__host__ cudaError_t copy_kernel_constants(unsigned int* src)
+{
+    return ( cudaMemcpyToSymbol(RUNNING_PARAM_CONSTANTS, src, N_RUNNING_PARAM_CONSTANTS*sizeof(unsigned int)) );
+}
 
 // Calculate parity
-__device__  int parity32(uint64_t x)
+__device__  int parity32(unsigned int x)
 {
     x ^= x >> 16;
     x ^= x >> 8;
