@@ -10,6 +10,9 @@
 #include "A5CudaSlice.h"
 
 
+/**
+ * @author: lc
+ */
 void cuda_write_log(const char* str) {
     FILE* f_run;
     f_run = fopen("./cuda_log", "a");
@@ -17,6 +20,17 @@ void cuda_write_log(const char* str) {
     fclose(f_run);
 }
 
+/**
+ * @author: huypn
+ * console logging
+ */
+
+
+
+/**
+ * @author: huypn
+ * Constructor
+ */
 A5CudaSlice::A5CudaSlice(
         A5Cuda* a5cuda,
         int deviceId,
@@ -26,16 +40,12 @@ A5CudaSlice::A5CudaSlice(
 {
     // CUDA DEVICE RUNNING PARAMETERS
     mDeviceId = deviceId;
-    mBlockSize = 128;
-    mStreamCount = 8;
-    mOffset = 512;
-    mDataSize = mStreamCount * mOffset;
     mRunning = true;
     mController = a5cuda;
     mMaxRound  = maxRound;
     mIterate   = 128;
     mMaxCycles = 10*(2<<dp)*maxRound;
-    mDp        = 32 - dp; // to deal with reversed bits 
+    mDp        = 32 - dp; // to deal with reversed bits
 
     // Invoking running loop
     mRunningThread = new std::thread(&A5CudaSlice::workingLoop, this);
@@ -56,7 +66,6 @@ A5CudaSlice::~A5CudaSlice()
 void A5CudaSlice::halt()
 {
     mRunning = false;
-    destroyStreams();
     mRunningThread->join();
 }
 
@@ -70,10 +79,31 @@ void A5CudaSlice::workingLoop()
     }
     // Clean exit
     syncStreams();
+    destroyStreams();
+    cudaDeviceReset();
 }
 
+/**
+ * @author: huypn
+ * Initialize running parameters for device.
+ *
+ */
 void A5CudaSlice::init() {
-    // Create streams to concurrently execute kernels
+    /* Use Cuda Occupancy API to heuristically determine BlockSize and GridSize */
+#if USE_OCCUPANCY_API
+    checkCudaErrors( cudaOccupancy )
+#else
+    mBlockSize = 128;
+    mStreamCount = 8;
+    mOffset = 512;
+#endif
+    mDataSize = mStreamCount * mOffset;
+
+#if DEBUG
+    fprintf(stderr, "[DEBUG] Running on device %d with [Blocksize,Gridsize] = [%d,%d]\n", mDeviceId, mBlocksize, mGridsize);
+#endif
+
+    /* @huypn: Create streams to concurrently execute kernels */
     mStreamArray = (cudaStream_t *) malloc(mStreamCount * sizeof(cudaStream_t));
     for (int i = 0; i < mStreamCount; i ++) {
         checkCudaErrors( cudaStreamCreate(&(mStreamArray[i])));
@@ -86,15 +116,21 @@ void A5CudaSlice::init() {
     running_parameters[2] = mOffset;
     running_parameters[3] = 0;
 
-    // huy.phung: workaround, given the fact that (1) constant memory manipulating function must be in the same scope with declaration
-    //      and so (2) #include -ing the declaration of constant memory here must lead to invalid symbol copy
-    void *kernel_param_const_ptr;
-    checkCudaErrors( copy_kernel_constants(running_parameters) );
-    /*
-    checkCudaErrors(cudaMemcpyToSymbol(
+    /*@huypn: workaround, given the fact that
+     * (1)  constant memory manipulating function must be
+     *      in the same scope with declaration and so
+     * (2)  #include -ing the declaration of constant memory here
+     *      must lead to invalid symbol copy void *kernel_param_const_ptr;
+
+     checkCudaErrors(cudaMemcpyToSymbol(
                 kernel_param_const_ptr,
                 running_parameters,
                 4*sizeof(unsigned int)));
+
+     */
+    checkCudaErrors( copy_kernel_constants(running_parameters) );
+
+    /*
     */
     // Memory allocation
     mJobs = new A5Cuda::JobPiece_s[mDataSize];
@@ -109,7 +145,7 @@ void A5CudaSlice::init() {
     checkCudaErrors(cudaHostRegister( hm_control, mDataSize * sizeof(unsigned int), CU_MEMHOSTALLOC_DEVICEMAP));
     checkCudaErrors(cudaHostGetDevicePointer( (void**)&d_control, hm_control, 0));
 
-    // Zeroing memory 
+    // Zeroing memory
     for (unsigned int i = 0; i < mDataSize; i++)
     {
         mJobs[i].start_value   = 0;
@@ -124,7 +160,7 @@ void A5CudaSlice::init() {
         hm_states[i].y         = 0;
         hm_states[i].w         = 0;
         hm_states[i].z         = 0;
-        hm_control[i]          = 0;//lc CHAINSTATE_control;
+        hm_control[i]          = 0;/* @lc CHAINSTATE_control; */
     }
 
 }
@@ -133,8 +169,9 @@ void A5CudaSlice::probeStreams()
 {
     for (int streamIdx=0; streamIdx < mStreamCount; streamIdx++) {
         cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) 
+        if (err != cudaSuccess) {
                 printf("Error: %s\n", cudaGetErrorString(err));
+        }
         if (cudaStreamQuery(mStreamArray[streamIdx]) == cudaSuccess) {
             process(streamIdx);
             invokeKernel(streamIdx);
@@ -213,7 +250,6 @@ void A5CudaSlice::process(int idx)
     }
 }
 
-// TODO: move mIterate to constant
 void A5CudaSlice::invokeKernel(int idx)
 {
     dim3 dimBlock(mBlockSize, 1);
@@ -285,12 +321,14 @@ uint64_t A5CudaSlice::getRfRev(uint4 state)
     return reversebits(((uint64_t) state.w << 32) | state.z, 64);
 }
 
-/*void A5CudaSlice::tick()*/
-/*{*/
-    /*if (cudaStreamQuery(mCudaStream) == cudaSuccess) {*/
-        /*process();*/
-        /*invokeKernel();*/
-    /*}*/
-/*}*/
+/*@huypn: DEPRECATED
 
+void A5CudaSlice::tick()
+{
+    if (cudaStreamQuery(mCudaStream) == cudaSuccess) {
+        process();
+        invokeKernel();
+    }
+}
+*/
 
