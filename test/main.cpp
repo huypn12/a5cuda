@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include "../A5CudaStubs.h"
+
+#include "../a5cuda"
 
 void test0()
 {
