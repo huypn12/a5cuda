@@ -1,23 +1,16 @@
-#include "A5CudaKernel.h"
+#include "kernel.h"
 
-#define N_LFSR_CONSTANTS 9
-__device__ __constant__ unsigned int LFSR_CONSTANTS[ N_LFSR_CONSTANTS ] = {
-    0x000100, 0x000400, 0x000400,   // CLK
-    0x072000, 0x300000, 0x700080,   // TAPS
-    0x040000, 0x200000, 0x400000    // OUT
-};
+#define R1CLK 0x000100 
+#define R2CLK 0x000400 
+#define R3CLK 0x000400 
 
-#define R1CLK   LFSR_CONSTANTS[0]
-#define R2CLK   LFSR_CONSTANTS[1]
-#define R3CLK   LFSR_CONSTANTS[2]
+#define R1TAPS 0x072000
+#define R2TAPS 0x300000
+#define R3TAPS 0x700080
 
-#define R1TAPS  LFSR_CONSTANTS[3]
-#define R2TAPS  LFSR_CONSTANTS[4]
-#define R3TAPS  LFSR_CONSTANTS[5]
-
-#define R1OUT   LFSR_CONSTANTS[6]
-#define R2OUT   LFSR_CONSTANTS[7]
-#define R3OUT   LFSR_CONSTANTS[8]
+#define R1OUT 0x040000
+#define R2OUT 0x200000
+#define R3OUT 0x400000
 
 #define N_RUNNING_PARAM_CONSTANTS 4
 __device__ __constant__ unsigned int RUNNING_PARAM_CONSTANTS[ N_RUNNING_PARAM_CONSTANTS ];
@@ -31,8 +24,11 @@ __host__ cudaError_t copy_kernel_constants(unsigned int* src)
     return ( cudaMemcpyToSymbol(RUNNING_PARAM_CONSTANTS, src, N_RUNNING_PARAM_CONSTANTS*sizeof(unsigned int)) );
 }
 
-// Calculate parity
-__device__  int parity32(unsigned int x)
+typedef unsigned char uint8_t;x
+typedef unsigned long int uint32_t;
+typedef unsigned long long int uint64_t;
+
+__device__ __forceinline__ int ComputeParity32(uint32_t x)
 {
     x ^= x >> 16;
     x ^= x >> 8;
@@ -43,29 +39,29 @@ __device__  int parity32(unsigned int x)
 }
 
 // Calculate parity for a byte
-__device__ int parity8(unsigned char x) {
-    x ^= x>>4;
-    x ^= x>>2;
-    x ^= x>>1;
+__device__ __forceinline__ int ComputeParity8(uint8_t x) {
+    x ^= x >> 4;
+    x ^= x >> 2;
+    x ^= x >> 1;
     return x&1;
 }
 
 // Calculate parity for 2 bits
-__device__ int parity2(unsigned char x) {
+__device__ __forceinline__ int ComputeParity2(uint8_t x) {
     x ^= x>>1;
     return x&1;
 }
 
-__device__ int clock_lfsr1(unsigned int reg)
+__device__ int ClockLfsr1(uint32_t reg)
 {
-    unsigned char t = (reg & R1TAPS) >> 13; // get only bits from 18-13
+    uint8_t t = (reg & R1TAPS) >> 13; // get only bits from 18-13
     reg = (reg << 1);
     reg |= parity8(t);
 
     return reg;
 }
 
-__device__ int clock_lfsr2(unsigned int reg)
+__device__ int ClockLfsr2(unsigned int reg)
 {
     unsigned char taps = (reg & R2TAPS) >> 20; // get only 2 bits from 20 -> 21
     reg = (reg << 1);
@@ -73,7 +69,7 @@ __device__ int clock_lfsr2(unsigned int reg)
     return reg;
 }
 
-__device__ int clock_lfsr3(unsigned int reg)
+__device__ int ClockLfsr3(unsigned int reg)
 {
     unsigned int taps = reg & R3TAPS; //  Tung: no need for t
     reg = (reg << 1);
@@ -108,7 +104,7 @@ __device__  void clock_major (unsigned int& R1, unsigned int& R2, unsigned int &
 /**
  * kernel, process each of 32 chains slot
  */
-__global__ void a51_cuda_kernel (
+__global__ void A5Kernel(
         /*
            unsigned int rounds,
            unsigned int size,

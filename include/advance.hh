@@ -5,10 +5,12 @@
 namespace a5cuda {
 class Advance {
 private:
-  uint64_t AdvanceRfLfsr(uint64_t v);
-  uint64_t ReverseBits(uint64_t r);
   std::vector<uint64_t> advances_;
   std::vector<uint64_t> rf_table_;
+
+protected:
+  uint64_t AdvanceRfLfsr(uint64_t v);
+  uint64_t ReverseBits(uint64_t r);
 
 public:
   Advance(unsigned int id, unsigned int size);
