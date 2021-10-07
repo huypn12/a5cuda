@@ -1,0 +1,5 @@
+{
+    "cmake.environment": {
+        "PATH": "${env:PATH}"
+    },    
+}
